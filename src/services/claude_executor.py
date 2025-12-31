@@ -475,7 +475,12 @@ class ClaudeExecutor:
         )
 
     async def execute_streaming(self, request: QueryRequest) -> AsyncIterator[StreamEvent]:
-        """Execute query with streaming response."""
+        """Execute query with streaming response.
+
+        Includes response size limiting to prevent memory exhaustion.
+        When max_response_size is exceeded, a truncation event is emitted
+        and text events are no longer forwarded.
+        """
         # Check circuit breaker
         circuit_breaker = get_circuit_breaker()
         if not await circuit_breaker.acquire():
@@ -502,6 +507,11 @@ class ClaudeExecutor:
         last_activity = time.time()
         stall_timeout = self.settings.message_stall_timeout
 
+        # Response size tracking for memory protection
+        max_response_size = self.settings.max_response_size
+        total_response_bytes = 0
+        response_truncated = False
+
         try:
             async with async_timeout(request.timeout or self.settings.default_timeout):
                 sdk_generator = query(
@@ -523,6 +533,46 @@ class ClaudeExecutor:
                         msg, SystemMessage, AssistantMessage, ResultMessage,
                         TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock
                     ):
+                        # Check response size for text events
+                        if event.event == "text" and isinstance(event.data, dict):
+                            text_content = event.data.get("text", "")
+                            text_bytes = len(text_content.encode("utf-8"))
+
+                            if response_truncated:
+                                # Already truncated - skip text events
+                                continue
+
+                            if total_response_bytes + text_bytes > max_response_size:
+                                # Truncate this event's text and emit truncation warning
+                                remaining_bytes = max_response_size - total_response_bytes
+                                if remaining_bytes > 0:
+                                    # Emit partial text (may cut mid-character, but safe)
+                                    truncated_text = text_content.encode("utf-8")[:remaining_bytes].decode("utf-8", errors="ignore")
+                                    yield StreamEvent(
+                                        event="text",
+                                        data={"text": truncated_text, "model": event.data.get("model")}
+                                    )
+                                    total_response_bytes = max_response_size
+
+                                # Emit truncation event
+                                response_truncated = True
+                                logger.warning(
+                                    "streaming_response_truncated",
+                                    max_size=max_response_size,
+                                    total_bytes=total_response_bytes
+                                )
+                                yield StreamEvent(
+                                    event="truncated",
+                                    data={
+                                        "reason": "max_response_size_exceeded",
+                                        "max_size": max_response_size,
+                                        "total_bytes": total_response_bytes
+                                    }
+                                )
+                                continue
+
+                            total_response_bytes += text_bytes
+
                         yield event
             # Record success
             await circuit_breaker.record_success()
