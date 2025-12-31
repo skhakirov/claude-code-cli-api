@@ -48,6 +48,11 @@ class AppState:
             task.cancel()
             cancelled += 1
 
+        # Wait for cancelled tasks to actually finish (they will raise CancelledError)
+        # This ensures resources are properly cleaned up before shutdown completes
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+
         return cancelled
 
 
