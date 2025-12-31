@@ -12,6 +12,8 @@ def mock_settings():
     """Mock Settings for tests without .env file."""
     return MagicMock(
         api_keys=["test-api-key"],
+        api_title="Claude Code CLI API",
+        api_version="1.0.0",
         anthropic_api_key="sk-ant-test",
         default_model="claude-sonnet-4-20250514",
         default_max_turns=20,
