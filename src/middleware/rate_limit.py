@@ -1,7 +1,7 @@
 """Simple rate limiting middleware using token bucket algorithm."""
 import time
 import asyncio
-from collections import defaultdict
+import threading
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
@@ -126,36 +126,41 @@ class RateLimiter:
         }
 
 
-# Global rate limiter instance
+# Global rate limiter instance with thread-safe initialization
 _rate_limiter: Optional[RateLimiter] = None
+_rate_limiter_lock = threading.Lock()
 
 
 def get_rate_limiter() -> RateLimiter:
-    """Get or create the global rate limiter."""
+    """Get or create the global rate limiter (thread-safe)."""
     global _rate_limiter
     if _rate_limiter is None:
-        settings = get_settings()
-        # Handle mocked settings in tests - use defaults if values are not numbers
-        try:
-            rps = float(settings.rate_limit_requests_per_second)
-        except (TypeError, ValueError):
-            rps = 10.0
-        try:
-            burst = int(settings.rate_limit_burst_size)
-        except (TypeError, ValueError):
-            burst = 20
+        with _rate_limiter_lock:
+            # Double-check locking pattern
+            if _rate_limiter is None:
+                settings = get_settings()
+                # Handle mocked settings in tests - use defaults if values are not numbers
+                try:
+                    rps = float(settings.rate_limit_requests_per_second)
+                except (TypeError, ValueError):
+                    rps = 10.0
+                try:
+                    burst = int(settings.rate_limit_burst_size)
+                except (TypeError, ValueError):
+                    burst = 20
 
-        _rate_limiter = RateLimiter(
-            requests_per_second=rps,
-            burst_size=burst
-        )
+                _rate_limiter = RateLimiter(
+                    requests_per_second=rps,
+                    burst_size=burst
+                )
     return _rate_limiter
 
 
 def reset_rate_limiter() -> None:
     """Reset the global rate limiter (for testing)."""
     global _rate_limiter
-    _rate_limiter = None
+    with _rate_limiter_lock:
+        _rate_limiter = None
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):

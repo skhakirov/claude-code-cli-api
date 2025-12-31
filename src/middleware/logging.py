@@ -7,7 +7,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..core.logging import get_logger, log_request, log_response, log_error
-from .metrics import get_metrics
+from .metrics import get_metrics_collector
 
 logger = get_logger(__name__)
 
@@ -57,9 +57,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 request_id=request_id,
             )
 
-            # Record metrics
-            metrics = get_metrics()
-            metrics.record_request(
+            # Record metrics (async)
+            metrics = get_metrics_collector()
+            await metrics.record_request(
                 endpoint=request.url.path,
                 status_code=response.status_code,
                 duration_ms=duration_ms,
@@ -82,9 +82,9 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 duration_ms=duration_ms,
             )
 
-            # Record error metrics
-            metrics = get_metrics()
-            metrics.record_request(
+            # Record error metrics (async)
+            metrics = get_metrics_collector()
+            await metrics.record_request(
                 endpoint=request.url.path,
                 status_code=500,
                 duration_ms=duration_ms,

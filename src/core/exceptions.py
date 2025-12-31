@@ -43,6 +43,14 @@ class CircuitOpenError(ClaudeAPIError):
     pass
 
 
+class ExecutionTimeoutError(ClaudeAPIError):
+    """Execution timeout - request took too long."""
+
+    def __init__(self, message: str, timeout_seconds: float):
+        super().__init__(message)
+        self.timeout_seconds = timeout_seconds
+
+
 # SDK error mapping to HTTP status codes
 # Source: https://platform.claude.com/docs/en/agent-sdk/python#error-types
 # Note: SDK exceptions are imported dynamically to avoid import errors when SDK not installed
@@ -51,6 +59,7 @@ SDK_ERROR_MAPPING: dict[Type[Exception], tuple[int, str]] = {
     UnauthorizedDirectoryError: (403, "Directory access denied"),
     SessionNotFoundError: (404, "Session not found"),
     CircuitOpenError: (503, "Service temporarily unavailable"),
+    ExecutionTimeoutError: (504, "Gateway Timeout"),
 }
 
 

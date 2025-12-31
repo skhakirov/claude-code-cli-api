@@ -84,7 +84,7 @@ from ..models.response import (
 )
 from ..core.config import get_settings
 from ..core.security import sanitize_path, sanitize_prompt
-from ..core.exceptions import handle_sdk_error, CircuitOpenError
+from ..core.exceptions import handle_sdk_error, CircuitOpenError, ExecutionTimeoutError
 from .circuit_breaker import get_circuit_breaker
 
 # Lazy SDK imports for testing without SDK installed
@@ -335,10 +335,15 @@ class ClaudeExecutor:
             error_msg = f"All {self.settings.retry_max_attempts} retry attempts failed: {str(e.last_attempt.exception())}"
             raise handle_sdk_error(e.last_attempt.exception())
         except asyncio.TimeoutError:
-            # Timeout - record failure
+            # Timeout - record failure and raise proper HTTP error
             await circuit_breaker.record_failure()
-            is_error = True
-            error_msg = f"Execution timeout after {request.timeout}s"
+            timeout_seconds = request.timeout or self.settings.default_timeout
+            raise handle_sdk_error(
+                ExecutionTimeoutError(
+                    f"Execution timeout after {timeout_seconds}s",
+                    timeout_seconds=timeout_seconds
+                )
+            )
         except Exception as e:
             # Non-retryable error or other exception
             if not _is_retryable_error(e):
@@ -406,7 +411,14 @@ class ClaudeExecutor:
 
         except asyncio.TimeoutError:
             await circuit_breaker.record_failure()
-            yield StreamEvent(event="error", data={"error": "Execution timeout"})
+            timeout_seconds = request.timeout or self.settings.default_timeout
+            yield StreamEvent(
+                event="error",
+                data={
+                    "error": f"Execution timeout after {timeout_seconds}s",
+                    "timeout_seconds": timeout_seconds
+                }
+            )
         except Exception as e:
             await circuit_breaker.record_failure()
             yield StreamEvent(event="error", data={"error": str(e)})

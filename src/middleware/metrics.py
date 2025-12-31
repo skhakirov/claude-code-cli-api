@@ -1,14 +1,17 @@
 """Simple metrics collection middleware without external dependencies."""
-import time
+import asyncio
+import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
-from threading import Lock
-from typing import Dict, List
+from typing import Dict, Optional
 
 
 @dataclass
 class MetricsCollector:
-    """Thread-safe metrics collector with simple aggregations."""
+    """Async-safe metrics collector with simple aggregations.
+
+    Uses asyncio.Lock for non-blocking async operations.
+    """
 
     # Counters
     request_count: int = 0
@@ -33,9 +36,21 @@ class MetricsCollector:
     # Status code distribution
     status_codes: Dict[int, int] = field(default_factory=lambda: defaultdict(int))
 
-    _lock: Lock = field(default_factory=Lock, repr=False)
+    # Async lock (lazy initialized)
+    _lock: Optional[asyncio.Lock] = field(default=None, repr=False)
+    # Thread lock for safe asyncio.Lock initialization
+    _init_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
-    def record_request(
+    def _get_lock(self) -> asyncio.Lock:
+        """Get or create asyncio.Lock with thread-safe initialization."""
+        if self._lock is None:
+            with self._init_lock:
+                # Double-check locking pattern
+                if self._lock is None:
+                    self._lock = asyncio.Lock()
+        return self._lock
+
+    async def record_request(
         self,
         endpoint: str,
         status_code: int,
@@ -44,8 +59,8 @@ class MetricsCollector:
         input_tokens: int = 0,
         output_tokens: int = 0
     ) -> None:
-        """Record a request with all its metrics."""
-        with self._lock:
+        """Record a request with all its metrics (async-safe)."""
+        async with self._get_lock():
             self.request_count += 1
             self.endpoint_counts[endpoint] += 1
             self.status_codes[status_code] += 1
@@ -72,9 +87,9 @@ class MetricsCollector:
             self.tokens_input += input_tokens
             self.tokens_output += output_tokens
 
-    def get_metrics(self) -> dict:
-        """Get current metrics as a dict (for JSON response)."""
-        with self._lock:
+    async def get_metrics(self) -> dict:
+        """Get current metrics as a dict (async-safe)."""
+        async with self._get_lock():
             return {
                 "counters": {
                     "requests_total": self.request_count,
@@ -93,9 +108,9 @@ class MetricsCollector:
                 "status_codes": dict(self.status_codes),
             }
 
-    def reset(self) -> None:
-        """Reset all metrics (useful for testing)."""
-        with self._lock:
+    async def reset(self) -> None:
+        """Reset all metrics (async-safe, useful for testing)."""
+        async with self._get_lock():
             self.request_count = 0
             self.error_count = 0
             self.tokens_input = 0
@@ -117,6 +132,6 @@ class MetricsCollector:
 metrics = MetricsCollector()
 
 
-def get_metrics() -> MetricsCollector:
+def get_metrics_collector() -> MetricsCollector:
     """Get the global metrics collector."""
     return metrics

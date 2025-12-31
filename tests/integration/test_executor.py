@@ -88,8 +88,9 @@ class TestClaudeExecutor:
 
     @pytest.mark.asyncio
     async def test_execute_query_timeout(self, mock_settings, mock_sdk):
-        """Execution timeout handling."""
+        """Execution timeout handling - should raise HTTPException with 504."""
         import asyncio
+        from fastapi import HTTPException
 
         async def slow_gen(*args, **kwargs):
             await asyncio.sleep(10)
@@ -106,10 +107,13 @@ class TestClaudeExecutor:
                 executor._sdk = mock_sdk
 
                 request = QueryRequest(prompt="Hello", timeout=1)
-                response = await executor.execute_query(request)
 
-                assert response.status.value == "error"
-                assert "timeout" in response.error.lower()
+                # TimeoutError now raises HTTPException with 504 status
+                with pytest.raises(HTTPException) as exc_info:
+                    await executor.execute_query(request)
+
+                assert exc_info.value.status_code == 504
+                assert "timeout" in exc_info.value.detail.lower()
 
     @pytest.mark.asyncio
     async def test_execute_query_with_model(self, mock_settings, mock_sdk):

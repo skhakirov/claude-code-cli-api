@@ -5,7 +5,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from ...core.config import get_settings
-from ...middleware.metrics import get_metrics
+from ...middleware.metrics import get_metrics_collector
 from ...services.circuit_breaker import get_circuit_breaker
 from ..state import app_state
 
@@ -178,5 +178,5 @@ async def get_metrics_endpoint() -> dict:
 
     Use for monitoring dashboards and alerting.
     """
-    collector = get_metrics()
-    return collector.get_metrics()
+    collector = get_metrics_collector()
+    return await collector.get_metrics()

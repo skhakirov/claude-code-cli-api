@@ -1,5 +1,6 @@
 """Circuit breaker pattern for SDK calls."""
 import asyncio
+import threading
 import time
 from enum import Enum
 from dataclasses import dataclass
@@ -172,19 +173,24 @@ class CircuitBreaker:
         }
 
 
-# Global circuit breaker for SDK calls
+# Global circuit breaker for SDK calls with thread-safe initialization
 _circuit_breaker: Optional[CircuitBreaker] = None
+_circuit_breaker_lock = threading.Lock()
 
 
 def get_circuit_breaker() -> CircuitBreaker:
-    """Get or create the global circuit breaker."""
+    """Get or create the global circuit breaker (thread-safe)."""
     global _circuit_breaker
     if _circuit_breaker is None:
-        _circuit_breaker = CircuitBreaker()
+        with _circuit_breaker_lock:
+            # Double-check locking pattern
+            if _circuit_breaker is None:
+                _circuit_breaker = CircuitBreaker()
     return _circuit_breaker
 
 
 def reset_circuit_breaker() -> None:
     """Reset the global circuit breaker (for testing)."""
     global _circuit_breaker
-    _circuit_breaker = None
+    with _circuit_breaker_lock:
+        _circuit_breaker = None
