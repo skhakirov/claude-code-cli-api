@@ -7,6 +7,19 @@ from unittest.mock import MagicMock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def clear_settings_cache():
+    """Clear settings cache before and after each test for isolation.
+
+    This prevents cached settings from leaking between tests,
+    especially when running E2E and integration tests together.
+    """
+    from src.core.config import get_settings
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def mock_settings():
     """Mock Settings for tests without .env file."""

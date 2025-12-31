@@ -5,9 +5,9 @@ These tests verify complete request/response flows using FastAPI TestClient.
 SDK calls are mocked to allow testing without Claude CLI installed.
 """
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
-from unittest.mock import patch, MagicMock
 
 # Set environment before importing app
 os.environ["CLAUDE_API_API_KEYS"] = '["test-key", "valid-key"]'

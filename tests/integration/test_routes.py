@@ -56,25 +56,53 @@ def mock_sdk():
 
 @pytest.fixture
 def client(mock_settings, mock_sdk):
-    """TestClient with mocked dependencies."""
-    with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-        with patch("src.core.config.get_settings", return_value=mock_settings):
-            # Clear caches before importing
-            from src.api.dependencies import get_executor
-            get_executor.cache_clear()
+    """TestClient with mocked dependencies.
 
-            # Reset app_state session_cache
-            from src.api.main import app_state
-            app_state.session_cache = None
+    Uses yield instead of return to keep patches active during test execution.
+    Patches get_settings at ALL import locations to ensure proper mocking
+    when running after E2E tests that set environment variables.
+    """
+    # Clear settings cache before patching
+    from src.core.config import get_settings
+    get_settings.cache_clear()
 
-            # Reset rate limiter and circuit breaker
-            from src.middleware.rate_limit import reset_rate_limiter
-            from src.services.circuit_breaker import reset_circuit_breaker
-            reset_rate_limiter()
-            reset_circuit_breaker()
+    # Patch get_settings at the source module AND all import locations
+    # This is necessary because Python's `from x import y` creates a new reference
+    patches = [
+        patch("src.services.claude_executor._get_sdk", return_value=mock_sdk),
+        patch("src.core.config.get_settings", return_value=mock_settings),
+        patch("src.middleware.auth.get_settings", return_value=mock_settings),
+        patch("src.api.dependencies.get_settings", return_value=mock_settings),
+        patch("src.middleware.rate_limit.get_settings", return_value=mock_settings),
+        patch("src.services.circuit_breaker.get_settings", return_value=mock_settings),
+    ]
 
-            from src.api.main import app
-            return TestClient(app)
+    for p in patches:
+        p.start()
+
+    try:
+        # Clear caches before importing
+        from src.api.dependencies import get_executor
+        get_executor.cache_clear()
+
+        # Reset app_state session_cache
+        from src.api.main import app_state
+        app_state.session_cache = None
+
+        # Reset rate limiter and circuit breaker
+        from src.middleware.rate_limit import reset_rate_limiter
+        from src.services.circuit_breaker import reset_circuit_breaker
+        reset_rate_limiter()
+        reset_circuit_breaker()
+
+        from src.api.main import app
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        for p in patches:
+            p.stop()
+        # Clear cache after test to prevent leaking mock settings
+        get_settings.cache_clear()
 
 
 class TestQueryRoutes:
@@ -117,28 +145,29 @@ class TestQueryRoutes:
 
         with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
             with patch("src.core.config.get_settings", return_value=mock_settings):
-                from src.api.dependencies import get_executor
-                get_executor.cache_clear()
+                with patch("src.middleware.auth.get_settings", return_value=mock_settings):
+                    from src.api.dependencies import get_executor
+                    get_executor.cache_clear()
 
-                from src.api.main import app, app_state
-                app_state.session_cache = None
+                    from src.api.main import app, app_state
+                    app_state.session_cache = None
 
-                from src.middleware.rate_limit import reset_rate_limiter
-                from src.services.circuit_breaker import reset_circuit_breaker
-                reset_rate_limiter()
-                reset_circuit_breaker()
+                    from src.middleware.rate_limit import reset_rate_limiter
+                    from src.services.circuit_breaker import reset_circuit_breaker
+                    reset_rate_limiter()
+                    reset_circuit_breaker()
 
-                client = TestClient(app)
+                    client = TestClient(app)
 
-                response = client.post(
-                    "/api/v1/query",
-                    json={"prompt": "Hello"},
-                    headers={"X-API-Key": "test-api-key"}
-                )
+                    response = client.post(
+                        "/api/v1/query",
+                        json={"prompt": "Hello"},
+                        headers={"X-API-Key": "test-api-key"}
+                    )
 
-                assert response.status_code == 200
-                data = response.json()
-                assert data["session_id"] == "test-123"
+                    assert response.status_code == 200
+                    data = response.json()
+                    assert data["session_id"] == "test-123"
 
     def test_query_validation_error(self, client):
         """Validation error for invalid request."""
@@ -171,31 +200,32 @@ class TestQueryRoutes:
 
         with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
             with patch("src.core.config.get_settings", return_value=mock_settings):
-                from src.api.dependencies import get_executor
-                get_executor.cache_clear()
+                with patch("src.middleware.auth.get_settings", return_value=mock_settings):
+                    from src.api.dependencies import get_executor
+                    get_executor.cache_clear()
 
-                from src.api.main import app, app_state
-                app_state.session_cache = None
+                    from src.api.main import app, app_state
+                    app_state.session_cache = None
 
-                from src.middleware.rate_limit import reset_rate_limiter
-                from src.services.circuit_breaker import reset_circuit_breaker
-                reset_rate_limiter()
-                reset_circuit_breaker()
+                    from src.middleware.rate_limit import reset_rate_limiter
+                    from src.services.circuit_breaker import reset_circuit_breaker
+                    reset_rate_limiter()
+                    reset_circuit_breaker()
 
-                client = TestClient(app)
+                    client = TestClient(app)
 
-                response = client.post(
-                    "/api/v1/query",
-                    json={
-                        "prompt": "Hello",
-                        "model": "claude-opus-4-20250514",
-                        "max_turns": 10,
-                        "permission_mode": "bypassPermissions"
-                    },
-                    headers={"X-API-Key": "test-api-key"}
-                )
+                    response = client.post(
+                        "/api/v1/query",
+                        json={
+                            "prompt": "Hello",
+                            "model": "claude-opus-4-20250514",
+                            "max_turns": 10,
+                            "permission_mode": "bypassPermissions"
+                        },
+                        headers={"X-API-Key": "test-api-key"}
+                    )
 
-                assert response.status_code == 200
+                    assert response.status_code == 200
 
 
 class TestHealthRoutes:
@@ -325,27 +355,28 @@ class TestValidationMiddleware:
 
         with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
             with patch("src.core.config.get_settings", return_value=mock_settings):
-                from src.api.dependencies import get_executor
-                get_executor.cache_clear()
+                with patch("src.middleware.auth.get_settings", return_value=mock_settings):
+                    from src.api.dependencies import get_executor
+                    get_executor.cache_clear()
 
-                from src.api.main import app, app_state
-                app_state.session_cache = None
+                    from src.api.main import app, app_state
+                    app_state.session_cache = None
 
-                from src.middleware.rate_limit import reset_rate_limiter
-                from src.services.circuit_breaker import reset_circuit_breaker
-                reset_rate_limiter()
-                reset_circuit_breaker()
+                    from src.middleware.rate_limit import reset_rate_limiter
+                    from src.services.circuit_breaker import reset_circuit_breaker
+                    reset_rate_limiter()
+                    reset_circuit_breaker()
 
-                client = TestClient(app)
+                    client = TestClient(app)
 
-                response = client.post(
-                    "/api/v1/query",
-                    json={"prompt": "Hello"},
-                    headers={"X-API-Key": "test-api-key"}
-                )
+                    response = client.post(
+                        "/api/v1/query",
+                        json={"prompt": "Hello"},
+                        headers={"X-API-Key": "test-api-key"}
+                    )
 
-                # Should pass validation and reach the handler
-                assert response.status_code == 200
+                    # Should pass validation and reach the handler
+                    assert response.status_code == 200
 
     def test_health_endpoint_bypasses_validation(self, client):
         """Health endpoints are exempt from validation."""
@@ -445,41 +476,42 @@ class TestMetricsEndpoint:
 
         with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
             with patch("src.core.config.get_settings", return_value=mock_settings):
-                from src.api.dependencies import get_executor
-                get_executor.cache_clear()
+                with patch("src.middleware.auth.get_settings", return_value=mock_settings):
+                    from src.api.dependencies import get_executor
+                    get_executor.cache_clear()
 
-                from src.api.main import app, app_state
-                app_state.session_cache = None
+                    from src.api.main import app, app_state
+                    app_state.session_cache = None
 
-                from src.middleware.rate_limit import reset_rate_limiter
-                from src.services.circuit_breaker import reset_circuit_breaker
-                reset_rate_limiter()
-                reset_circuit_breaker()
+                    from src.middleware.rate_limit import reset_rate_limiter
+                    from src.services.circuit_breaker import reset_circuit_breaker
+                    reset_rate_limiter()
+                    reset_circuit_breaker()
 
-                client = TestClient(app)
+                    client = TestClient(app)
 
-                # Reset metrics before test
-                import asyncio
-                metrics = get_metrics_collector()
-                asyncio.get_event_loop().run_until_complete(metrics.reset())
+                    # Reset metrics before test
+                    import asyncio
+                    metrics = get_metrics_collector()
+                    asyncio.get_event_loop().run_until_complete(metrics.reset())
 
-                # Make a request
-                response = client.post(
-                    "/api/v1/query",
-                    json={"prompt": "Hello"},
-                    headers={"X-API-Key": "test-api-key"}
-                )
-                assert response.status_code == 200
+                    # Make a request
+                    response = client.post(
+                        "/api/v1/query",
+                        json={"prompt": "Hello"},
+                        headers={"X-API-Key": "test-api-key"}
+                    )
+                    assert response.status_code == 200
 
-                # Check metrics were recorded
-                metrics_response = client.get("/api/v1/metrics")
-                data = metrics_response.json()
+                    # Check metrics were recorded
+                    metrics_response = client.get("/api/v1/metrics")
+                    data = metrics_response.json()
 
-                # Should have at least 2 requests (the query and metrics request)
-                assert data["counters"]["requests_total"] >= 1
+                    # Should have at least 2 requests (the query and metrics request)
+                    assert data["counters"]["requests_total"] >= 1
 
-                # Should have endpoint tracking
-                assert len(data["endpoints"]) > 0
+                    # Should have endpoint tracking
+                    assert len(data["endpoints"]) > 0
 
 
 class TestRequestIdHeader:
