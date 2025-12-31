@@ -1,0 +1,30 @@
+services:
+  claude-api:
+    build: .
+    container_name: claude-code-api
+    restart: unless-stopped
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - CLAUDE_API_API_KEYS=${CLAUDE_API_API_KEYS}
+      - CLAUDE_API_DEFAULT_MODEL=${CLAUDE_API_DEFAULT_MODEL:-claude-sonnet-4-20250514}
+      - CLAUDE_API_DEFAULT_PERMISSION_MODE=${CLAUDE_API_DEFAULT_PERMISSION_MODE:-acceptEdits}
+      - CLAUDE_API_LOG_LEVEL=${CLAUDE_API_LOG_LEVEL:-INFO}
+    volumes:
+      - ./workspace:/workspace:rw
+    ports:
+      - "8000:8000"
+    networks:
+      - devgrid
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.claude-api.rule=Host(`claude-api.devgrid.site`)"
+      - "traefik.http.routers.claude-api.entrypoints=websecure"
+      - "traefik.http.routers.claude-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.claude-api.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.claude-ratelimit.ratelimit.average=20"
+      - "traefik.http.middlewares.claude-ratelimit.ratelimit.burst=10"
+      - "traefik.http.routers.claude-api.middlewares=claude-ratelimit"
+
+networks:
+  devgrid:
+    external: true
