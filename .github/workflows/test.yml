@@ -56,8 +56,21 @@ jobs:
       - name: Test Docker image health
         run: |
           docker run -d --name test-container -p 8000:8000 \
-            -e CLAUDE_API_API_KEYS=test-key \
+            -e CLAUDE_API_API_KEYS='["test-key"]' \
             claude-code-api:test
-          sleep 5
-          curl -f http://localhost:8000/api/v1/health || exit 1
+
+          # Wait for container to be healthy with retry
+          for i in {1..30}; do
+            if curl -sf http://localhost:8000/api/v1/health; then
+              echo "Container is healthy"
+              docker stop test-container
+              exit 0
+            fi
+            echo "Waiting for container... ($i/30)"
+            sleep 2
+          done
+
+          echo "Container failed to start"
+          docker logs test-container
           docker stop test-container
+          exit 1
