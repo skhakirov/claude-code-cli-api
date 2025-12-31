@@ -267,59 +267,70 @@ class ClaudeExecutor:
             thinking_blocks = []
             response_truncated = False
 
-            async with async_timeout(request.timeout or self.settings.default_timeout):
-                # Source: https://platform.claude.com/docs/en/agent-sdk/python#query
-                async for msg in query(
-                    prompt=prompt,
-                    options=self._build_options(request)
-                ):
-                    # AssistantMessage processing
-                    # Source: https://platform.claude.com/docs/en/agent-sdk/python#assistantmessage
-                    # content: list[ContentBlock], model: str
-                    if isinstance(msg, AssistantMessage):
-                        model_used = msg.model
-                        for block in msg.content:
-                            # TextBlock: text: str
-                            if isinstance(block, TextBlock):
-                                # Check response size limit
-                                if len(result_text) + len(block.text) > max_response_size:
-                                    remaining = max_response_size - len(result_text)
-                                    if remaining > 0:
-                                        result_text += block.text[:remaining]
-                                    response_truncated = True
-                                else:
-                                    result_text += block.text
-                            # ThinkingBlock: thinking: str, signature: str
-                            elif isinstance(block, ThinkingBlock):
-                                thinking_blocks.append(ThinkingInfo(
-                                    thinking=block.thinking,
-                                    signature=block.signature
-                                ))
-                            # ToolUseBlock: id: str, name: str, input: dict
-                            elif isinstance(block, ToolUseBlock):
-                                tool_calls.append(ToolCallInfo(
-                                    id=block.id,
-                                    name=block.name,
-                                    input=block.input
-                                ))
+            # Store generator for proper cleanup
+            sdk_generator = None
+            try:
+                async with async_timeout(request.timeout or self.settings.default_timeout):
+                    # Source: https://platform.claude.com/docs/en/agent-sdk/python#query
+                    sdk_generator = query(
+                        prompt=prompt,
+                        options=self._build_options(request)
+                    )
+                    async for msg in sdk_generator:
+                        # AssistantMessage processing
+                        # Source: https://platform.claude.com/docs/en/agent-sdk/python#assistantmessage
+                        # content: list[ContentBlock], model: str
+                        if isinstance(msg, AssistantMessage):
+                            model_used = msg.model
+                            for block in msg.content:
+                                # TextBlock: text: str
+                                if isinstance(block, TextBlock):
+                                    # Check response size limit
+                                    if len(result_text) + len(block.text) > max_response_size:
+                                        remaining = max_response_size - len(result_text)
+                                        if remaining > 0:
+                                            result_text += block.text[:remaining]
+                                        response_truncated = True
+                                    else:
+                                        result_text += block.text
+                                # ThinkingBlock: thinking: str, signature: str
+                                elif isinstance(block, ThinkingBlock):
+                                    thinking_blocks.append(ThinkingInfo(
+                                        thinking=block.thinking,
+                                        signature=block.signature
+                                    ))
+                                # ToolUseBlock: id: str, name: str, input: dict
+                                elif isinstance(block, ToolUseBlock):
+                                    tool_calls.append(ToolCallInfo(
+                                        id=block.id,
+                                        name=block.name,
+                                        input=block.input
+                                    ))
 
-                    # ResultMessage processing (always last)
-                    # Source: https://platform.claude.com/docs/en/agent-sdk/python#resultmessage
-                    elif isinstance(msg, ResultMessage):
-                        session_id = msg.session_id
-                        cost = msg.total_cost_usd
-                        num_turns = msg.num_turns
-                        duration_api_ms = msg.duration_api_ms
-                        is_error = msg.is_error
+                        # ResultMessage processing (always last)
+                        # Source: https://platform.claude.com/docs/en/agent-sdk/python#resultmessage
+                        elif isinstance(msg, ResultMessage):
+                            session_id = msg.session_id
+                            cost = msg.total_cost_usd
+                            num_turns = msg.num_turns
+                            duration_api_ms = msg.duration_api_ms
+                            is_error = msg.is_error
 
-                        if msg.result and not result_text:
-                            result_text = msg.result
+                            if msg.result and not result_text:
+                                result_text = msg.result
 
-                        if msg.usage:
-                            usage = UsageInfo(
-                                input_tokens=msg.usage.get('input_tokens', 0),
-                                output_tokens=msg.usage.get('output_tokens', 0)
-                            )
+                            if msg.usage:
+                                usage = UsageInfo(
+                                    input_tokens=msg.usage.get('input_tokens', 0),
+                                    output_tokens=msg.usage.get('output_tokens', 0)
+                                )
+            finally:
+                # Ensure generator cleanup to prevent resource leaks
+                if sdk_generator is not None:
+                    try:
+                        await sdk_generator.aclose()
+                    except Exception:
+                        pass  # Ignore cleanup errors
 
         try:
             # Apply retry decorator dynamically
@@ -395,12 +406,15 @@ class ClaudeExecutor:
         ToolUseBlock = self.sdk['ToolUseBlock']
         ToolResultBlock = self.sdk['ToolResultBlock']
 
+        # Store generator for proper cleanup
+        sdk_generator = None
         try:
             async with async_timeout(request.timeout or self.settings.default_timeout):
-                async for msg in query(
+                sdk_generator = query(
                     prompt=prompt,
                     options=self._build_options(request)
-                ):
+                )
+                async for msg in sdk_generator:
                     for event in self._message_to_events(
                         msg, SystemMessage, AssistantMessage, ResultMessage,
                         TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock
@@ -422,6 +436,13 @@ class ClaudeExecutor:
         except Exception as e:
             await circuit_breaker.record_failure()
             yield StreamEvent(event="error", data={"error": str(e)})
+        finally:
+            # Ensure generator cleanup to prevent resource leaks
+            if sdk_generator is not None:
+                try:
+                    await sdk_generator.aclose()
+                except Exception:
+                    pass  # Ignore cleanup errors
 
     def _message_to_events(
         self, msg, SystemMessage, AssistantMessage, ResultMessage,
