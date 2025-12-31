@@ -392,3 +392,47 @@ class TestSessionRoutes:
             headers={"X-API-Key": "test-api-key"}
         )
         assert response.status_code == 404
+
+
+class TestRequestIdHeader:
+    """Tests for X-Request-ID header handling."""
+
+    def test_response_includes_request_id_header(self, client):
+        """Response should include X-Request-ID header."""
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+        assert "X-Request-ID" in response.headers
+        # Request ID should be 8 characters (truncated UUID)
+        assert len(response.headers["X-Request-ID"]) == 8
+
+    def test_response_echoes_client_request_id(self, client):
+        """Response should echo client-provided X-Request-ID."""
+        custom_request_id = "my-req-1"
+        response = client.get(
+            "/api/v1/health",
+            headers={"X-Request-ID": custom_request_id}
+        )
+        assert response.status_code == 200
+        assert response.headers["X-Request-ID"] == custom_request_id
+
+    def test_request_id_in_error_response(self, client):
+        """Error responses should also include X-Request-ID."""
+        response = client.post(
+            "/api/v1/query",
+            json={"prompt": "Hello"}
+            # No X-API-Key - should get 401
+        )
+        assert response.status_code == 401
+        assert "X-Request-ID" in response.headers
+
+    def test_request_id_is_unique_per_request(self, client):
+        """Each request should get a unique X-Request-ID."""
+        response1 = client.get("/api/v1/health")
+        response2 = client.get("/api/v1/health")
+
+        request_id1 = response1.headers.get("X-Request-ID")
+        request_id2 = response2.headers.get("X-Request-ID")
+
+        assert request_id1 is not None
+        assert request_id2 is not None
+        assert request_id1 != request_id2
