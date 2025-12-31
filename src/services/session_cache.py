@@ -1,5 +1,6 @@
 """In-memory session cache with TTL and async-safe access."""
 import asyncio
+import threading
 from typing import Optional, List
 from datetime import datetime, timezone
 from cachetools import TTLCache
@@ -34,11 +35,15 @@ class SessionCache:
         """
         self._cache: TTLCache = TTLCache(maxsize=maxsize, ttl=ttl)
         self._lock: asyncio.Lock | None = None
+        self._init_lock = threading.Lock()  # For thread-safe asyncio.Lock init
 
     def _get_lock(self) -> asyncio.Lock:
-        """Lazy initialization of asyncio.Lock (must be created in event loop)."""
+        """Lazy initialization of asyncio.Lock with thread-safe double-check locking."""
         if self._lock is None:
-            self._lock = asyncio.Lock()
+            with self._init_lock:
+                # Double-check locking pattern
+                if self._lock is None:
+                    self._lock = asyncio.Lock()
         return self._lock
 
     async def save(self, session_id: str, metadata: SessionMetadata) -> None:

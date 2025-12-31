@@ -19,26 +19,33 @@ def sanitize_path(path: str, allowed_directories: List[str]) -> str:
         Normalized absolute path
 
     Raises:
-        PathTraversalError: If path traversal attack detected
+        PathTraversalError: If path traversal attack detected or path is invalid
         UnauthorizedDirectoryError: If path is not in allowed directories
     """
-    # Normalize the path
-    normalized = Path(path).resolve()
-    normalized_str = str(normalized)
+    # Normalize the path - handle OSError/PermissionError
+    try:
+        normalized = Path(path).resolve()
+        normalized_str = str(normalized)
+    except (OSError, PermissionError) as e:
+        raise PathTraversalError(f"Invalid path '{path}': {e}")
 
     # Check for path traversal - if resolved path differs significantly
     # from original after normalization, it might be a traversal attempt
-    original_parts = Path(path).parts
+    try:
+        original_parts = Path(path).parts
+    except (OSError, ValueError) as e:
+        raise PathTraversalError(f"Invalid path format '{path}': {e}")
+
     if ".." in original_parts:
         # Check if the resolved path is still within allowed directories
         is_within_allowed = False
         for allowed_dir in allowed_directories:
-            allowed_path = Path(allowed_dir).resolve()
             try:
+                allowed_path = Path(allowed_dir).resolve()
                 normalized.relative_to(allowed_path)
                 is_within_allowed = True
                 break
-            except ValueError:
+            except (ValueError, OSError, PermissionError):
                 continue
 
         if not is_within_allowed:
@@ -46,11 +53,11 @@ def sanitize_path(path: str, allowed_directories: List[str]) -> str:
 
     # Check if path is within any allowed directory
     for allowed_dir in allowed_directories:
-        allowed_path = Path(allowed_dir).resolve()
         try:
+            allowed_path = Path(allowed_dir).resolve()
             normalized.relative_to(allowed_path)
             return normalized_str
-        except ValueError:
+        except (ValueError, OSError, PermissionError):
             continue
 
     raise UnauthorizedDirectoryError(

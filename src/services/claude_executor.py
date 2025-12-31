@@ -29,14 +29,25 @@ else:
 
     @asynccontextmanager
     async def async_timeout(seconds):
-        """Async timeout context manager for Python 3.10."""
+        """Async timeout context manager for Python 3.10.
+
+        Safely handles the case where current_task() returns None.
+        """
         task = asyncio.current_task()
-        loop = asyncio.get_event_loop()
+        if task is None:
+            # No task context - yield without timeout (shouldn't happen in normal use)
+            yield
+            return
+
+        loop = asyncio.get_running_loop()  # Safer than get_event_loop()
         handle = loop.call_later(seconds, task.cancel)
         try:
             yield
         except asyncio.CancelledError:
-            raise asyncio.TimeoutError()
+            # Check if cancellation was due to our timeout
+            if not handle.cancelled():
+                raise asyncio.TimeoutError()
+            raise  # Re-raise if cancelled for other reasons
         finally:
             handle.cancel()
 
@@ -85,6 +96,9 @@ from ..models.response import (
 from ..core.config import get_settings
 from ..core.security import sanitize_path, sanitize_prompt
 from ..core.exceptions import handle_sdk_error, CircuitOpenError, ExecutionTimeoutError
+from ..core.logging import get_logger
+
+logger = get_logger(__name__)
 from .circuit_breaker import get_circuit_breaker
 
 # Lazy SDK imports for testing without SDK installed
@@ -200,6 +214,18 @@ class ClaudeExecutor:
             include_partial_messages=request.include_partial_messages,
         )
 
+    def _log_retry_attempt(self, retry_state) -> None:
+        """Log retry attempt for debugging and monitoring."""
+        exception = retry_state.outcome.exception()
+        logger.warning(
+            "sdk_retry_attempt",
+            attempt=retry_state.attempt_number,
+            max_attempts=self.settings.retry_max_attempts,
+            exception_type=type(exception).__name__ if exception else "Unknown",
+            exception_message=str(exception) if exception else "No exception",
+            wait_time=retry_state.next_action.sleep if retry_state.next_action else 0,
+        )
+
     def _create_retry_decorator(self):
         """Create a tenacity retry decorator with configured settings."""
         return retry(
@@ -210,6 +236,7 @@ class ClaudeExecutor:
                 max=self.settings.retry_max_wait,
             ),
             retry=retry_if_exception(_is_retryable_error),
+            before_sleep=self._log_retry_attempt,
             reraise=True,
         )
 
