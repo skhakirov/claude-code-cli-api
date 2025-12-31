@@ -1,6 +1,7 @@
 """Alerting service for critical error notifications."""
 import asyncio
 import json
+import threading
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 import httpx
@@ -9,6 +10,11 @@ from ..core.config import get_settings
 from ..core.logging import get_logger, format_exception_chain
 
 logger = get_logger(__name__)
+
+# Max entries in _last_alerts before cleanup is triggered
+_MAX_LAST_ALERTS_SIZE = 1000
+# Remove entries older than this many seconds during cleanup
+_CLEANUP_THRESHOLD_SECONDS = 3600  # 1 hour
 
 
 class AlertingService:
@@ -46,6 +52,31 @@ class AlertingService:
     def is_enabled(self) -> bool:
         """Check if alerting is enabled."""
         return bool(self._webhook_url)
+
+    async def _cleanup_old_alerts(self) -> None:
+        """Remove old entries from _last_alerts to prevent memory leak.
+
+        Called when _last_alerts exceeds MAX size. Removes entries older
+        than _CLEANUP_THRESHOLD_SECONDS. Must be called with _lock held.
+        """
+        if len(self._last_alerts) < _MAX_LAST_ALERTS_SIZE:
+            return
+
+        now = datetime.now(timezone.utc).timestamp()
+        old_keys = [
+            key for key, timestamp in self._last_alerts.items()
+            if now - timestamp > _CLEANUP_THRESHOLD_SECONDS
+        ]
+
+        for key in old_keys:
+            del self._last_alerts[key]
+
+        if old_keys:
+            logger.debug(
+                "alerting_cleanup_performed",
+                removed_count=len(old_keys),
+                remaining_count=len(self._last_alerts)
+            )
 
     async def send_alert(
         self,
@@ -91,6 +122,9 @@ class AlertingService:
                     return False
 
                 self._last_alerts[alert_type] = now
+
+                # Periodic cleanup to prevent memory leak
+                await self._cleanup_old_alerts()
 
         # Build payload
         payload = {
@@ -210,23 +244,37 @@ class AlertingService:
         )
 
 
-# Global alerting service instance
+# Global alerting service instance with thread-safe initialization
 _alerting_service: Optional[AlertingService] = None
+_alerting_service_lock = threading.Lock()
 
 
 def get_alerting_service() -> AlertingService:
-    """Get or create the global alerting service."""
+    """Get or create the global alerting service (thread-safe).
+
+    Uses double-check locking pattern to ensure only one instance
+    is created even with concurrent first calls.
+    """
     global _alerting_service
     if _alerting_service is None:
-        settings = get_settings()
-        _alerting_service = AlertingService(
-            webhook_url=settings.alert_webhook_url or None,
-            timeout=settings.alert_webhook_timeout
-        )
+        with _alerting_service_lock:
+            # Double-check locking pattern
+            if _alerting_service is None:
+                settings = get_settings()
+                _alerting_service = AlertingService(
+                    webhook_url=settings.alert_webhook_url or None,
+                    timeout=settings.alert_webhook_timeout
+                )
+                logger.info(
+                    "alerting_service_initialized",
+                    enabled=bool(settings.alert_webhook_url),
+                    timeout=settings.alert_webhook_timeout
+                )
     return _alerting_service
 
 
 def reset_alerting_service() -> None:
     """Reset the global alerting service (for testing)."""
     global _alerting_service
-    _alerting_service = None
+    with _alerting_service_lock:
+        _alerting_service = None

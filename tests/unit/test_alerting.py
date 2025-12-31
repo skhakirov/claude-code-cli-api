@@ -266,3 +266,148 @@ class TestGlobalAlertingService:
             assert service1 is not service2
 
         reset_alerting_service()
+
+
+class TestAlertingServiceP2Improvements:
+    """Tests for P2 improvements: thread-safety and cleanup."""
+
+    @pytest.mark.asyncio
+    async def test_cleanup_removes_old_entries(self):
+        """Cleanup removes entries older than threshold."""
+        from src.services.alerting import (
+            AlertingService,
+            _MAX_LAST_ALERTS_SIZE,
+            _CLEANUP_THRESHOLD_SECONDS
+        )
+        from datetime import datetime, timezone
+        import httpx
+
+        service = AlertingService(
+            webhook_url="https://example.com/webhook",
+            min_interval_seconds=0.001  # Very short interval for testing
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        # Manually populate _last_alerts with old entries to trigger cleanup
+        now = datetime.now(timezone.utc).timestamp()
+        old_timestamp = now - _CLEANUP_THRESHOLD_SECONDS - 100  # Older than threshold
+
+        # Add many old entries to exceed max size
+        for i in range(_MAX_LAST_ALERTS_SIZE + 10):
+            service._last_alerts[f"old_alert_{i}"] = old_timestamp
+
+        with patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+
+            # This should trigger cleanup
+            await service.send_alert(
+                alert_type="new_alert",
+                title="Test",
+                message="Test"
+            )
+
+        # Old entries should be cleaned up
+        assert len(service._last_alerts) < _MAX_LAST_ALERTS_SIZE
+        # New alert should be present
+        assert "new_alert" in service._last_alerts
+
+    @pytest.mark.asyncio
+    async def test_cleanup_keeps_recent_entries(self):
+        """Cleanup keeps entries newer than threshold."""
+        from src.services.alerting import (
+            AlertingService,
+            _MAX_LAST_ALERTS_SIZE,
+            _CLEANUP_THRESHOLD_SECONDS
+        )
+        from datetime import datetime, timezone
+        import httpx
+
+        service = AlertingService(
+            webhook_url="https://example.com/webhook",
+            min_interval_seconds=0.001
+        )
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+
+        now = datetime.now(timezone.utc).timestamp()
+
+        # Add recent entries (within threshold)
+        for i in range(100):
+            service._last_alerts[f"recent_alert_{i}"] = now - 60  # 1 minute old
+
+        # Add old entries to exceed max size
+        old_timestamp = now - _CLEANUP_THRESHOLD_SECONDS - 100
+        for i in range(_MAX_LAST_ALERTS_SIZE + 10):
+            service._last_alerts[f"old_alert_{i}"] = old_timestamp
+
+        with patch.object(httpx.AsyncClient, "post", new_callable=AsyncMock) as mock_post:
+            mock_post.return_value = mock_response
+
+            await service.send_alert(
+                alert_type="trigger_cleanup",
+                title="Test",
+                message="Test"
+            )
+
+        # Recent entries should still be there
+        recent_count = sum(1 for k in service._last_alerts if k.startswith("recent_alert_"))
+        assert recent_count == 100
+
+    def test_thread_safe_initialization(self):
+        """get_alerting_service is thread-safe with concurrent access."""
+        from src.services.alerting import get_alerting_service, reset_alerting_service
+        import concurrent.futures
+
+        reset_alerting_service()
+
+        with patch("src.services.alerting.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                alert_webhook_url="https://example.com/webhook",
+                alert_webhook_timeout=5.0
+            )
+
+            services = []
+
+            def get_service():
+                return get_alerting_service()
+
+            # Call from multiple threads simultaneously
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                futures = [executor.submit(get_service) for _ in range(100)]
+                for future in concurrent.futures.as_completed(futures):
+                    services.append(future.result())
+
+            # All should be the same instance
+            assert len(services) == 100
+            first_service = services[0]
+            for service in services:
+                assert service is first_service
+
+        reset_alerting_service()
+
+    def test_reset_is_thread_safe(self):
+        """reset_alerting_service is thread-safe."""
+        from src.services.alerting import get_alerting_service, reset_alerting_service
+        import concurrent.futures
+
+        with patch("src.services.alerting.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                alert_webhook_url="",
+                alert_webhook_timeout=5.0
+            )
+
+            def reset_and_get():
+                reset_alerting_service()
+                return get_alerting_service()
+
+            # This should not raise any errors
+            with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+                futures = [executor.submit(reset_and_get) for _ in range(20)]
+                results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+            assert len(results) == 20
+
+        reset_alerting_service()
