@@ -103,3 +103,9 @@ logs/
 
 # Claude
 .claude/
+
+# Internal development docs
+PROMPT.md
+PLAN.md
+RELEASE_CHECKLIST.md
+CLAUDE.md
