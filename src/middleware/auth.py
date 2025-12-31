@@ -1,5 +1,5 @@
 """Authentication middleware."""
-from fastapi import Request, HTTPException, Security
+from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 
 from ..core.config import get_settings

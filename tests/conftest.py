@@ -2,9 +2,9 @@
 Pytest fixtures for TDD.
 These fixtures are used before writing production code.
 """
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from typing import AsyncIterator
 
 
 @pytest.fixture

@@ -17,16 +17,16 @@ class TestPathSanitization:
 
     def test_path_traversal_blocked(self):
         """Path traversal attacks are blocked."""
-        from src.core.security import sanitize_path
         from src.core.exceptions import PathTraversalError
+        from src.core.security import sanitize_path
 
         with pytest.raises(PathTraversalError):
             sanitize_path("/workspace/../etc/passwd", ["/workspace"])
 
     def test_unauthorized_directory_blocked(self):
         """Access to unauthorized directories is blocked."""
-        from src.core.security import sanitize_path
         from src.core.exceptions import UnauthorizedDirectoryError
+        from src.core.security import sanitize_path
 
         with pytest.raises(UnauthorizedDirectoryError):
             sanitize_path("/etc/passwd", ["/workspace"])
@@ -54,8 +54,8 @@ class TestPathSanitization:
 
     def test_double_dot_in_middle_blocked(self):
         """Double dots in path middle are blocked."""
-        from src.core.security import sanitize_path
         from src.core.exceptions import PathTraversalError
+        from src.core.security import sanitize_path
 
         with pytest.raises(PathTraversalError):
             sanitize_path("/workspace/project/../../etc", ["/workspace"])

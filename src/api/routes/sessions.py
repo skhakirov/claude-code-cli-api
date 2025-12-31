@@ -1,10 +1,11 @@
 """Session management endpoints."""
 from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 
+from ...middleware.auth import verify_api_key
 from ...services.session_cache import SessionCache, SessionMetadata
 from ..dependencies import get_session_cache
-from ...middleware.auth import verify_api_key
 
 router = APIRouter(prefix="/sessions", tags=["Sessions"])
 

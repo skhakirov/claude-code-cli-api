@@ -4,20 +4,21 @@ FastAPI application for Claude Code CLI API.
 Source: https://platform.claude.com/docs/en/agent-sdk/python
 """
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from ..core.config import get_settings
 from ..core.logging import configure_logging, get_logger
-from ..services.session_cache import SessionCache
 from ..middleware.logging import RequestLoggingMiddleware
 from ..middleware.rate_limit import RateLimitMiddleware
 from ..middleware.validation import RequestValidationMiddleware
-
-# Import app_state from state module to avoid circular imports
-from .state import app_state, get_app_state, AppState
+from ..services.session_cache import SessionCache
 
 # Import routes after state to avoid circular imports
 from .routes import health, query, sessions
+
+# Import app_state from state module to avoid circular imports
+from .state import AppState, app_state, get_app_state
 
 # Configure structured logging
 configure_logging()

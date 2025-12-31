@@ -7,18 +7,18 @@ Sources:
 - Message Types: https://platform.claude.com/docs/en/agent-sdk/python#message-types
 - Content Blocks: https://platform.claude.com/docs/en/agent-sdk/python#content-block-types
 """
-import time
 import asyncio
 import sys
-from typing import AsyncIterator, Optional, TYPE_CHECKING, Any
+import time
 from pathlib import Path
+from typing import Any, AsyncIterator, Optional
 
 from tenacity import (
+    RetryError,
     retry,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential_jitter,
-    retry_if_exception,
-    RetryError,
 )
 
 # Python 3.10 compatibility
@@ -120,48 +120,37 @@ def _classify_error_type(exception: BaseException) -> str:
 
     return "unknown"
 
+from ..core.config import get_settings
+from ..core.exceptions import CircuitOpenError, ExecutionTimeoutError, handle_sdk_error
+from ..core.logging import get_logger
+from ..core.security import sanitize_path, sanitize_prompt
 from ..models.request import QueryRequest
 from ..models.response import (
-    QueryResponse, QueryStatus, ToolCallInfo, UsageInfo,
-    StreamEvent, ThinkingInfo
+    QueryResponse,
+    QueryStatus,
+    StreamEvent,
+    ThinkingInfo,
+    ToolCallInfo,
+    UsageInfo,
 )
-from ..core.config import get_settings
-from ..core.security import sanitize_path, sanitize_prompt
-from ..core.exceptions import handle_sdk_error, CircuitOpenError, ExecutionTimeoutError
-from ..core.logging import get_logger
 
 logger = get_logger(__name__)
 from .circuit_breaker import get_circuit_breaker
-
-# Lazy SDK imports for testing without SDK installed
-if TYPE_CHECKING:
-    from claude_agent_sdk import (
-        query as sdk_query,
-        ClaudeAgentOptions,
-        AssistantMessage,
-        ResultMessage,
-        SystemMessage,
-        UserMessage,
-        TextBlock,
-        ThinkingBlock,
-        ToolUseBlock,
-        ToolResultBlock,
-    )
 
 
 def _get_sdk():
     """Lazy import of SDK components."""
     from claude_agent_sdk import (
-        query,
-        ClaudeAgentOptions,
         AssistantMessage,
+        ClaudeAgentOptions,
         ResultMessage,
         SystemMessage,
-        UserMessage,
         TextBlock,
         ThinkingBlock,
-        ToolUseBlock,
         ToolResultBlock,
+        ToolUseBlock,
+        UserMessage,
+        query,
     )
     return {
         'query': query,
@@ -430,11 +419,14 @@ class ClaudeExecutor:
             # All retries exhausted - record failure
             # Determine error type from the last exception
             last_exc = e.last_attempt.exception()
+            if last_exc is None:
+                last_exc = RuntimeError("Unknown retry error")
             error_type = _classify_error_type(last_exc)
             await circuit_breaker.record_failure(error_type=error_type)
             is_error = True
             error_msg = f"All {self.settings.retry_max_attempts} retry attempts failed: {str(last_exc)}"
-            raise handle_sdk_error(last_exc)
+            # Cast to Exception for handle_sdk_error (BaseException is always an Exception here)
+            raise handle_sdk_error(last_exc if isinstance(last_exc, Exception) else Exception(str(last_exc)))
         except asyncio.TimeoutError:
             # Timeout - record failure and raise proper HTTP error
             await circuit_breaker.record_failure(error_type="timeout")

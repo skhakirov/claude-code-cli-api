@@ -3,7 +3,8 @@ Request models matching ClaudeAgentOptions from SDK.
 
 Source: https://platform.claude.com/docs/en/agent-sdk/python#claudeagentoptions
 """
-from typing import Optional, List, Dict, Any, Literal
+from typing import Any, Dict, List, Literal, Optional
+
 from pydantic import BaseModel, Field
 
 # Source: https://platform.claude.com/docs/en/agent-sdk/python#permissionmode

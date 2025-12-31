@@ -1,6 +1,4 @@
 """Request validation middleware for early rejection of invalid requests."""
-from typing import Optional
-
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware

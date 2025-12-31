@@ -1,6 +1,6 @@
 """Application state for graceful shutdown support."""
 import asyncio
-from typing import Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, Set
 
 if TYPE_CHECKING:
     from ..services.session_cache import SessionCache

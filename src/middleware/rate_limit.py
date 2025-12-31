@@ -1,7 +1,7 @@
 """Simple rate limiting middleware using token bucket algorithm."""
-import time
 import asyncio
 import threading
+import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 

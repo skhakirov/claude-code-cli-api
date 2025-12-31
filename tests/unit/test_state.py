@@ -1,7 +1,8 @@
 """Tests for application state management."""
 import asyncio
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 
 from src.api.state import AppState, app_state, get_app_state
 

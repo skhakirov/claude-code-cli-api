@@ -2,7 +2,6 @@
 TDD: Exception handling tests.
 Status: RED (must fail before implementation)
 """
-import pytest
 from fastapi import HTTPException
 
 
@@ -43,7 +42,7 @@ class TestSDKErrorMapping:
 
     def test_handle_path_traversal_error(self):
         """PathTraversalError maps to 400."""
-        from src.core.exceptions import handle_sdk_error, PathTraversalError
+        from src.core.exceptions import PathTraversalError, handle_sdk_error
 
         error = PathTraversalError("path traversal attempt")
         http_error = handle_sdk_error(error)
@@ -53,7 +52,7 @@ class TestSDKErrorMapping:
 
     def test_handle_unauthorized_directory_error(self):
         """UnauthorizedDirectoryError maps to 403."""
-        from src.core.exceptions import handle_sdk_error, UnauthorizedDirectoryError
+        from src.core.exceptions import UnauthorizedDirectoryError, handle_sdk_error
 
         error = UnauthorizedDirectoryError("/etc/passwd")
         http_error = handle_sdk_error(error)
@@ -63,7 +62,7 @@ class TestSDKErrorMapping:
 
     def test_handle_session_not_found_error(self):
         """SessionNotFoundError maps to 404."""
-        from src.core.exceptions import handle_sdk_error, SessionNotFoundError
+        from src.core.exceptions import SessionNotFoundError, handle_sdk_error
 
         error = SessionNotFoundError("session-123")
         http_error = handle_sdk_error(error)

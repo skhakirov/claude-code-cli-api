@@ -2,12 +2,12 @@
 import asyncio
 import threading
 import time
+from dataclasses import dataclass
 from enum import Enum
-from dataclasses import dataclass, field
-from typing import Optional, Dict, Callable, Awaitable
+from typing import Awaitable, Callable, Dict, Optional
 
-from ..core.logging import get_logger
 from ..core.config import get_settings
+from ..core.logging import get_logger
 
 logger = get_logger(__name__)
 

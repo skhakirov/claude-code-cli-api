@@ -2,7 +2,7 @@
 import logging
 import sys
 import traceback
-from typing import Optional, List
+from typing import List, Optional
 
 import structlog
 from structlog.types import Processor
@@ -165,9 +165,9 @@ def format_exception_chain(exc: BaseException, max_depth: int = 10) -> List[dict
     Returns:
         List of exception info dicts with type, message, and traceback
     """
-    chain = []
-    seen = set()
-    current = exc
+    chain: list[dict[str, str]] = []
+    seen: set[int] = set()
+    current: Optional[BaseException] = exc
     depth = 0
 
     while current is not None and depth < max_depth:
@@ -242,7 +242,7 @@ def get_simplified_traceback(exc: BaseException, max_frames: int = 10) -> List[s
     Returns:
         List of formatted frame strings
     """
-    frames = []
+    frames: list[str] = []
     tb = exc.__traceback__
 
     while tb is not None and len(frames) < max_frames:

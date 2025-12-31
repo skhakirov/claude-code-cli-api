@@ -1,7 +1,7 @@
 """Dependency injection for FastAPI."""
 from functools import lru_cache
 
-from ..core.config import get_settings, Settings
+from ..core.config import get_settings
 from ..services.claude_executor import ClaudeExecutor
 from ..services.session_cache import SessionCache
 

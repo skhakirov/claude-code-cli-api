@@ -13,14 +13,14 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends
 from sse_starlette.sse import EventSourceResponse
 
+from ...core.logging import get_logger
+from ...middleware.auth import verify_api_key
 from ...models.request import QueryRequest
 from ...models.response import QueryResponse
 from ...services.claude_executor import ClaudeExecutor
 from ...services.session_cache import SessionCache, SessionMetadata
 from ..dependencies import get_executor, get_session_cache
 from ..state import app_state
-from ...middleware.auth import verify_api_key
-from ...core.logging import get_logger
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/query", tags=["Query"])

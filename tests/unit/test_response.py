@@ -2,7 +2,6 @@
 TDD: Response models tests.
 Status: RED (must fail before implementation)
 """
-import pytest
 
 
 class TestQueryResponse:
@@ -26,7 +25,11 @@ class TestQueryResponse:
     def test_query_response_full(self):
         """QueryResponse with all fields."""
         from src.models.response import (
-            QueryResponse, QueryStatus, UsageInfo, ToolCallInfo, ThinkingInfo
+            QueryResponse,
+            QueryStatus,
+            ThinkingInfo,
+            ToolCallInfo,
+            UsageInfo,
         )
 
         response = QueryResponse(

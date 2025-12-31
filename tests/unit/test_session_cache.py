@@ -2,8 +2,9 @@
 TDD: Session cache tests.
 Status: GREEN (async methods)
 """
-import pytest
 from datetime import datetime, timezone
+
+import pytest
 
 
 class TestSessionCache:
@@ -236,6 +237,7 @@ class TestStreamingState:
     async def test_streaming_state_concurrent_event_ids(self):
         """Event IDs should be unique under concurrent access."""
         import asyncio
+
         from src.api.routes.query import StreamingState
 
         state = StreamingState()
@@ -290,6 +292,7 @@ class TestSessionPersistence:
     async def test_persist_to_file_creates_file(self, tmp_path):
         """Persistence creates file with correct structure."""
         import json
+
         from src.services.session_cache import SessionCache, SessionMetadata
 
         persistence_file = tmp_path / "sessions.json"
@@ -340,6 +343,7 @@ class TestSessionPersistence:
     def test_load_from_file_restores_sessions(self, tmp_path):
         """Load from file restores saved sessions."""
         import json
+
         from src.services.session_cache import SessionCache
 
         persistence_file = tmp_path / "sessions.json"
@@ -377,6 +381,7 @@ class TestSessionPersistence:
         """Expired sessions are not loaded."""
         import json
         from datetime import timedelta
+
         from src.services.session_cache import SessionCache
 
         persistence_file = tmp_path / "sessions.json"

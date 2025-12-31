@@ -7,7 +7,7 @@ import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from ..core.logging import get_logger, log_request, log_response, log_error
+from ..core.logging import get_logger, log_error, log_request, log_response
 from .metrics import get_metrics_collector
 
 logger = get_logger(__name__)

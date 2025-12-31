@@ -2,8 +2,9 @@
 TDD: Integration tests for API routes.
 Status: GREEN (with mocked dependencies)
 """
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from fastapi.testclient import TestClient
 
 
@@ -302,7 +303,7 @@ class TestValidationMiddleware:
 
     def test_post_with_json_content_type_passes(self, mock_settings):
         """POST with application/json passes validation."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock, patch
 
         mock_sdk = create_mock_sdk()
 

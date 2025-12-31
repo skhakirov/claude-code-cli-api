@@ -1,13 +1,13 @@
 """Alerting service for critical error notifications."""
 import asyncio
-import json
 import threading
 from datetime import datetime, timezone
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
+
 import httpx
 
 from ..core.config import get_settings
-from ..core.logging import get_logger, format_exception_chain
+from ..core.logging import format_exception_chain, get_logger
 
 logger = get_logger(__name__)
 
@@ -127,7 +127,7 @@ class AlertingService:
                 await self._cleanup_old_alerts()
 
         # Build payload
-        payload = {
+        payload: Dict[str, Any] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "alert_type": alert_type,
             "title": title,
@@ -146,11 +146,15 @@ class AlertingService:
         if context:
             payload["context"] = context
 
-        # Send webhook
+        # Send webhook (webhook_url guaranteed by is_enabled check)
+        webhook_url = self._webhook_url
+        if not webhook_url:
+            return False
+
         try:
             async with httpx.AsyncClient(timeout=self._timeout) as client:
                 response = await client.post(
-                    self._webhook_url,
+                    webhook_url,
                     json=payload,
                     headers={"Content-Type": "application/json"}
                 )

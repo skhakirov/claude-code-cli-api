@@ -1,7 +1,6 @@
 """
 Tests for P3: Enhanced logging and stack traces.
 """
-import pytest
 
 
 class TestExceptionChainFormatting:
@@ -103,6 +102,7 @@ class TestLogCriticalError:
     def test_log_critical_error_logs_with_chain(self):
         """Critical error logs exception chain."""
         from unittest.mock import MagicMock
+
         from src.core.logging import log_critical_error
 
         mock_logger = MagicMock()

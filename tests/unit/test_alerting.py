@@ -1,8 +1,9 @@
 """
 Tests for P3: Alerting service.
 """
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 
 class TestAlertingService:
@@ -43,8 +44,9 @@ class TestAlertingService:
     @pytest.mark.asyncio
     async def test_send_alert_rate_limiting(self):
         """Rate limiting prevents duplicate alerts."""
-        from src.services.alerting import AlertingService
         import httpx
+
+        from src.services.alerting import AlertingService
 
         service = AlertingService(
             webhook_url="https://example.com/webhook",
@@ -88,8 +90,9 @@ class TestAlertingService:
     @pytest.mark.asyncio
     async def test_send_alert_force_bypasses_rate_limit(self):
         """Force flag bypasses rate limiting."""
-        from src.services.alerting import AlertingService
         import httpx
+
+        from src.services.alerting import AlertingService
 
         service = AlertingService(
             webhook_url="https://example.com/webhook",
@@ -122,9 +125,10 @@ class TestAlertingService:
     @pytest.mark.asyncio
     async def test_send_alert_includes_exception(self):
         """Alert includes exception details when provided."""
-        from src.services.alerting import AlertingService
+
         import httpx
-        import json
+
+        from src.services.alerting import AlertingService
 
         service = AlertingService(webhook_url="https://example.com/webhook")
 
@@ -157,8 +161,9 @@ class TestAlertingService:
     @pytest.mark.asyncio
     async def test_alert_critical_error_convenience_method(self):
         """alert_critical_error sends proper alert."""
-        from src.services.alerting import AlertingService
         import httpx
+
+        from src.services.alerting import AlertingService
 
         service = AlertingService(webhook_url="https://example.com/webhook")
 
@@ -182,8 +187,9 @@ class TestAlertingService:
     @pytest.mark.asyncio
     async def test_send_alert_handles_timeout(self):
         """Alert handles HTTP timeout gracefully."""
-        from src.services.alerting import AlertingService
         import httpx
+
+        from src.services.alerting import AlertingService
 
         service = AlertingService(
             webhook_url="https://example.com/webhook",
@@ -206,8 +212,9 @@ class TestAlertingService:
     @pytest.mark.asyncio
     async def test_send_alert_handles_http_error(self):
         """Alert handles HTTP error response gracefully."""
-        from src.services.alerting import AlertingService
         import httpx
+
+        from src.services.alerting import AlertingService
 
         service = AlertingService(webhook_url="https://example.com/webhook")
 
@@ -274,13 +281,15 @@ class TestAlertingServiceP2Improvements:
     @pytest.mark.asyncio
     async def test_cleanup_removes_old_entries(self):
         """Cleanup removes entries older than threshold."""
-        from src.services.alerting import (
-            AlertingService,
-            _MAX_LAST_ALERTS_SIZE,
-            _CLEANUP_THRESHOLD_SECONDS
-        )
         from datetime import datetime, timezone
+
         import httpx
+
+        from src.services.alerting import (
+            _CLEANUP_THRESHOLD_SECONDS,
+            _MAX_LAST_ALERTS_SIZE,
+            AlertingService,
+        )
 
         service = AlertingService(
             webhook_url="https://example.com/webhook",
@@ -316,13 +325,15 @@ class TestAlertingServiceP2Improvements:
     @pytest.mark.asyncio
     async def test_cleanup_keeps_recent_entries(self):
         """Cleanup keeps entries newer than threshold."""
-        from src.services.alerting import (
-            AlertingService,
-            _MAX_LAST_ALERTS_SIZE,
-            _CLEANUP_THRESHOLD_SECONDS
-        )
         from datetime import datetime, timezone
+
         import httpx
+
+        from src.services.alerting import (
+            _CLEANUP_THRESHOLD_SECONDS,
+            _MAX_LAST_ALERTS_SIZE,
+            AlertingService,
+        )
 
         service = AlertingService(
             webhook_url="https://example.com/webhook",
@@ -358,8 +369,9 @@ class TestAlertingServiceP2Improvements:
 
     def test_thread_safe_initialization(self):
         """get_alerting_service is thread-safe with concurrent access."""
-        from src.services.alerting import get_alerting_service, reset_alerting_service
         import concurrent.futures
+
+        from src.services.alerting import get_alerting_service, reset_alerting_service
 
         reset_alerting_service()
 
@@ -390,8 +402,9 @@ class TestAlertingServiceP2Improvements:
 
     def test_reset_is_thread_safe(self):
         """reset_alerting_service is thread-safe."""
-        from src.services.alerting import get_alerting_service, reset_alerting_service
         import concurrent.futures
+
+        from src.services.alerting import get_alerting_service, reset_alerting_service
 
         with patch("src.services.alerting.get_settings") as mock_settings:
             mock_settings.return_value = MagicMock(

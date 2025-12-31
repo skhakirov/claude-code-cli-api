@@ -2,10 +2,11 @@
 TDD: Integration tests for ClaudeExecutor.
 Status: GREEN (with mocked SDK)
 """
-import pytest
 import asyncio
 import time
-from unittest.mock import patch, MagicMock, AsyncMock
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestClaudeExecutor:
@@ -76,8 +77,8 @@ class TestClaudeExecutor:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                from src.services.claude_executor import ClaudeExecutor
                 from src.models.request import QueryRequest
+                from src.services.claude_executor import ClaudeExecutor
 
                 executor = ClaudeExecutor()
                 executor._sdk = mock_sdk
@@ -92,6 +93,7 @@ class TestClaudeExecutor:
     async def test_execute_query_timeout(self, mock_settings, mock_sdk):
         """Execution timeout handling - should raise HTTPException with 504."""
         import asyncio
+
         from fastapi import HTTPException
 
         async def slow_gen(*args, **kwargs):
@@ -102,8 +104,8 @@ class TestClaudeExecutor:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                from src.services.claude_executor import ClaudeExecutor
                 from src.models.request import QueryRequest
+                from src.services.claude_executor import ClaudeExecutor
 
                 executor = ClaudeExecutor()
                 executor._sdk = mock_sdk
@@ -138,8 +140,8 @@ class TestClaudeExecutor:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                from src.services.claude_executor import ClaudeExecutor
                 from src.models.request import QueryRequest
+                from src.services.claude_executor import ClaudeExecutor
 
                 executor = ClaudeExecutor()
                 executor._sdk = mock_sdk
@@ -173,8 +175,8 @@ class TestClaudeExecutor:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                from src.services.claude_executor import ClaudeExecutor
                 from src.models.request import QueryRequest
+                from src.services.claude_executor import ClaudeExecutor
 
                 executor = ClaudeExecutor()
                 executor._sdk = mock_sdk
@@ -207,8 +209,8 @@ class TestClaudeExecutor:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                from src.services.claude_executor import ClaudeExecutor
                 from src.models.request import QueryRequest
+                from src.services.claude_executor import ClaudeExecutor
 
                 executor = ClaudeExecutor()
                 executor._sdk = mock_sdk
@@ -229,8 +231,8 @@ class TestClaudeExecutor:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                from src.services.claude_executor import ClaudeExecutor
                 from src.models.request import QueryRequest
+                from src.services.claude_executor import ClaudeExecutor
 
                 executor = ClaudeExecutor()
                 executor._sdk = mock_sdk
@@ -341,8 +343,8 @@ class TestP0Robustness:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                from src.services.claude_executor import ClaudeExecutor
                 from src.models.request import QueryRequest
+                from src.services.claude_executor import ClaudeExecutor
 
                 executor = ClaudeExecutor()
                 executor._sdk = mock_sdk
@@ -386,9 +388,9 @@ class TestP0Robustness:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                with patch("src.services.claude_executor.logger") as mock_logger:
-                    from src.services.claude_executor import ClaudeExecutor
+                with patch("src.services.claude_executor.logger") as _mock_logger:
                     from src.models.request import QueryRequest
+                    from src.services.claude_executor import ClaudeExecutor
 
                     executor = ClaudeExecutor()
                     executor._sdk = mock_sdk
@@ -423,8 +425,8 @@ class TestP0Robustness:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                from src.services.claude_executor import ClaudeExecutor
                 from src.models.request import QueryRequest
+                from src.services.claude_executor import ClaudeExecutor
 
                 executor = ClaudeExecutor()
                 executor._sdk = mock_sdk
@@ -446,10 +448,10 @@ class TestP1Reliability:
     async def test_circuit_breaker_weighted_failures(self):
         """Circuit breaker should use weighted failure counting."""
         from src.services.circuit_breaker import (
+            ERROR_WEIGHTS,
             CircuitBreaker,
             CircuitBreakerConfig,
             CircuitState,
-            ERROR_WEIGHTS
         )
 
         # Config with threshold of 5
@@ -475,11 +477,7 @@ class TestP1Reliability:
     @pytest.mark.asyncio
     async def test_circuit_breaker_process_errors_heavier(self):
         """Process errors should have higher weight."""
-        from src.services.circuit_breaker import (
-            CircuitBreaker,
-            CircuitBreakerConfig,
-            CircuitState
-        )
+        from src.services.circuit_breaker import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
         config = CircuitBreakerConfig(failure_threshold=5)
         cb = CircuitBreaker(config)
@@ -530,10 +528,7 @@ class TestP1Reliability:
 
     def test_get_circuit_breaker_uses_settings(self, mock_settings):
         """get_circuit_breaker should use settings for configuration."""
-        from src.services.circuit_breaker import (
-            get_circuit_breaker,
-            reset_circuit_breaker
-        )
+        from src.services.circuit_breaker import get_circuit_breaker, reset_circuit_breaker
 
         # Set custom values in mock settings
         mock_settings.circuit_breaker_failure_threshold = 10
@@ -633,8 +628,8 @@ class TestStreamingResponseSizeLimit:
         with patch("src.services.claude_executor.get_settings", return_value=mock_settings):
             with patch("src.core.config.get_settings", return_value=mock_settings):
                 with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                    from src.services.claude_executor import ClaudeExecutor
                     from src.models.request import QueryRequest
+                    from src.services.claude_executor import ClaudeExecutor
 
                     executor = ClaudeExecutor()
                     executor._sdk = mock_sdk
@@ -687,8 +682,8 @@ class TestStreamingResponseSizeLimit:
         with patch("src.services.claude_executor.get_settings", return_value=mock_settings):
             with patch("src.core.config.get_settings", return_value=mock_settings):
                 with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                    from src.services.claude_executor import ClaudeExecutor
                     from src.models.request import QueryRequest
+                    from src.services.claude_executor import ClaudeExecutor
 
                     executor = ClaudeExecutor()
                     executor._sdk = mock_sdk
@@ -748,8 +743,8 @@ class TestStreamingResponseSizeLimit:
         with patch("src.services.claude_executor.get_settings", return_value=mock_settings):
             with patch("src.core.config.get_settings", return_value=mock_settings):
                 with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                    from src.services.claude_executor import ClaudeExecutor
                     from src.models.request import QueryRequest
+                    from src.services.claude_executor import ClaudeExecutor
 
                     executor = ClaudeExecutor()
                     executor._sdk = mock_sdk
@@ -804,8 +799,8 @@ class TestStreamingResponseSizeLimit:
         with patch("src.services.claude_executor.get_settings", return_value=mock_settings):
             with patch("src.core.config.get_settings", return_value=mock_settings):
                 with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
-                    from src.services.claude_executor import ClaudeExecutor
                     from src.models.request import QueryRequest
+                    from src.services.claude_executor import ClaudeExecutor
 
                     executor = ClaudeExecutor()
                     executor._sdk = mock_sdk

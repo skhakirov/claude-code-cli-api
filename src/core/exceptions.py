@@ -10,8 +10,9 @@ SDK Exception Classes:
 - ProcessError: Claude Code process fails (has exit_code, stderr)
 - CLIJSONDecodeError: JSON parsing fails (has line, original_error)
 """
+from typing import Optional, Type
+
 from fastapi import HTTPException
-from typing import Type, Optional
 
 from .logging import get_logger
 
@@ -70,10 +71,10 @@ def _get_sdk_error_mapping() -> dict[Type[Exception], tuple[int, str]]:
     try:
         from claude_agent_sdk import (
             ClaudeSDKError,
-            CLINotFoundError,
             CLIConnectionError,
-            ProcessError,
             CLIJSONDecodeError,
+            CLINotFoundError,
+            ProcessError,
         )
         mapping.update({
             CLINotFoundError: (503, "Claude CLI not available"),

@@ -2,7 +2,6 @@
 TDD: Configuration tests.
 Status: RED (must fail before implementation)
 """
-import pytest
 
 
 class TestSettings:
