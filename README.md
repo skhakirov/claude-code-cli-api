@@ -1,6 +1,6 @@
 # Claude Code CLI API Wrapper
 
-[![CI](https://github.com/skhakirov/claude-code-cli-api/actions/workflows/ci.yml/badge.svg)](https://github.com/skhakirov/claude-code-cli-api/actions/workflows/ci.yml)
+[![Tests](https://github.com/skhakirov/claude-code-cli-api/actions/workflows/test.yml/badge.svg)](https://github.com/skhakirov/claude-code-cli-api/actions/workflows/test.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Release](https://img.shields.io/github/v/release/skhakirov/claude-code-cli-api)](https://github.com/skhakirov/claude-code-cli-api/releases)
