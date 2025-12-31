@@ -39,6 +39,15 @@ def mock_settings():
         # P3 settings
         alert_webhook_url="",  # Empty = disabled
         alert_webhook_timeout=5.0,
+        # Circuit breaker settings
+        circuit_breaker_failure_threshold=5,
+        circuit_breaker_success_threshold=2,
+        circuit_breaker_timeout=30.0,
+        # Rate limit settings
+        rate_limit_requests_per_second=10.0,
+        rate_limit_burst_size=20,
+        # Shutdown settings
+        shutdown_timeout=30.0,
     )
 
 

@@ -527,3 +527,29 @@ class TestP1Reliability:
         status = cb.get_status()
         assert status["error_types"] == {}
         assert status["weighted_failure_count"] == 0.0
+
+    def test_get_circuit_breaker_uses_settings(self, mock_settings):
+        """get_circuit_breaker should use settings for configuration."""
+        from src.services.circuit_breaker import (
+            get_circuit_breaker,
+            reset_circuit_breaker
+        )
+
+        # Set custom values in mock settings
+        mock_settings.circuit_breaker_failure_threshold = 10
+        mock_settings.circuit_breaker_success_threshold = 5
+        mock_settings.circuit_breaker_timeout = 60.0
+
+        with patch("src.services.circuit_breaker.get_settings", return_value=mock_settings):
+            # Reset to force re-initialization
+            reset_circuit_breaker()
+
+            cb = get_circuit_breaker()
+
+            # Verify config matches settings
+            assert cb.config.failure_threshold == 10
+            assert cb.config.success_threshold == 5
+            assert cb.config.timeout_seconds == 60.0
+
+        # Cleanup
+        reset_circuit_breaker()

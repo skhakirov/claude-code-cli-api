@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict
 
 from ..core.logging import get_logger
+from ..core.config import get_settings
 
 logger = get_logger(__name__)
 
@@ -242,13 +243,28 @@ _circuit_breaker_lock = threading.Lock()
 
 
 def get_circuit_breaker() -> CircuitBreaker:
-    """Get or create the global circuit breaker (thread-safe)."""
+    """Get or create the global circuit breaker (thread-safe).
+
+    Uses configuration from settings for threshold and timeout values.
+    """
     global _circuit_breaker
     if _circuit_breaker is None:
         with _circuit_breaker_lock:
             # Double-check locking pattern
             if _circuit_breaker is None:
-                _circuit_breaker = CircuitBreaker()
+                settings = get_settings()
+                config = CircuitBreakerConfig(
+                    failure_threshold=settings.circuit_breaker_failure_threshold,
+                    success_threshold=settings.circuit_breaker_success_threshold,
+                    timeout_seconds=settings.circuit_breaker_timeout,
+                )
+                _circuit_breaker = CircuitBreaker(config=config)
+                logger.info(
+                    "circuit_breaker_initialized",
+                    failure_threshold=config.failure_threshold,
+                    success_threshold=config.success_threshold,
+                    timeout_seconds=config.timeout_seconds,
+                )
     return _circuit_breaker
 
 
