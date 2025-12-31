@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     circuit_breaker_success_threshold: int = 2
     circuit_breaker_timeout: float = 30.0
 
+    # Shutdown
+    shutdown_timeout: float = 30.0  # Graceful shutdown timeout in seconds
+
     # Logging
     log_level: str = "INFO"
 

@@ -59,7 +59,11 @@ class CircuitBreaker:
         return self._failure_count
 
     def is_available(self) -> bool:
-        """Check if circuit allows requests (non-blocking check)."""
+        """Check if circuit allows requests (non-blocking, for monitoring only).
+
+        Note: This is a racy check for monitoring/health endpoints.
+        Use acquire() for actual request gating.
+        """
         if self._state == CircuitState.CLOSED:
             return True
 
@@ -75,6 +79,28 @@ class CircuitBreaker:
             return self._half_open_calls < self.config.half_open_max_calls
 
         return False
+
+    async def is_available_async(self) -> bool:
+        """Check if circuit allows requests (async-safe, locked).
+
+        Use this for accurate state checks that need consistency.
+        For request gating, use acquire() instead.
+        """
+        async with self._lock:
+            if self._state == CircuitState.CLOSED:
+                return True
+
+            if self._state == CircuitState.OPEN:
+                if self._last_failure_time is not None:
+                    elapsed = time.time() - self._last_failure_time
+                    if elapsed >= self.config.timeout_seconds:
+                        return True
+                return False
+
+            if self._state == CircuitState.HALF_OPEN:
+                return self._half_open_calls < self.config.half_open_max_calls
+
+            return False
 
     async def acquire(self) -> bool:
         """

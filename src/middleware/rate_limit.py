@@ -57,15 +57,18 @@ class RateLimiter:
     Per-key rate limiter using token bucket algorithm.
 
     Thread-safe for use in async context.
+    Memory-bounded: limits max active keys to prevent unbounded growth.
     """
 
     def __init__(
         self,
         requests_per_second: float = 10.0,
-        burst_size: int = 20
+        burst_size: int = 20,
+        max_keys: int = 10000
     ):
         self.requests_per_second = requests_per_second
         self.burst_size = burst_size
+        self.max_keys = max_keys
         self._buckets: Dict[str, TokenBucket] = {}
         self._lock = asyncio.Lock()
         self._cleanup_interval = 300  # Clean up old buckets every 5 minutes
@@ -82,8 +85,12 @@ class RateLimiter:
             # Periodic cleanup of old buckets
             now = time.time()
             if now - self._last_cleanup > self._cleanup_interval:
-                await self._cleanup_old_buckets()
+                self._cleanup_old_buckets_sync()
                 self._last_cleanup = now
+
+            # Forced cleanup if max_keys reached
+            if len(self._buckets) >= self.max_keys and key not in self._buckets:
+                self._force_cleanup_oldest()
 
             # Get or create bucket for this key
             if key not in self._buckets:
@@ -98,8 +105,8 @@ class RateLimiter:
 
             return allowed, retry_after
 
-    async def _cleanup_old_buckets(self) -> None:
-        """Remove buckets that haven't been used recently."""
+    def _cleanup_old_buckets_sync(self) -> None:
+        """Remove buckets that haven't been used recently (sync, called under lock)."""
         now = time.time()
         stale_threshold = 600  # 10 minutes
 
@@ -114,13 +121,38 @@ class RateLimiter:
         if keys_to_remove:
             logger.debug(
                 "rate_limiter_cleanup",
-                removed_keys=len(keys_to_remove)
+                removed_keys=len(keys_to_remove),
+                remaining_keys=len(self._buckets)
             )
+
+    def _force_cleanup_oldest(self) -> None:
+        """Remove oldest 10% of buckets when max_keys reached (sync, called under lock)."""
+        if not self._buckets:
+            return
+
+        # Sort by last_update, remove oldest 10%
+        sorted_keys = sorted(
+            self._buckets.keys(),
+            key=lambda k: self._buckets[k].last_update
+        )
+        num_to_remove = max(1, len(sorted_keys) // 10)
+        keys_to_remove = sorted_keys[:num_to_remove]
+
+        for key in keys_to_remove:
+            del self._buckets[key]
+
+        logger.warning(
+            "rate_limiter_forced_cleanup",
+            removed_keys=num_to_remove,
+            remaining_keys=len(self._buckets),
+            max_keys=self.max_keys
+        )
 
     def get_stats(self) -> dict:
         """Get rate limiter statistics."""
         return {
             "active_keys": len(self._buckets),
+            "max_keys": self.max_keys,
             "requests_per_second": self.requests_per_second,
             "burst_size": self.burst_size,
         }

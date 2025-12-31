@@ -46,18 +46,22 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
-    logger.info("application_shutting_down")
+    logger.info(
+        "application_shutting_down",
+        shutdown_timeout=settings.shutdown_timeout
+    )
 
     # Signal shutdown to all components
     app_state.shutdown_event.set()
 
-    # Wait for active tasks with timeout
-    cancelled = await app_state.wait_for_tasks(timeout=30.0)
+    # Wait for active tasks with configurable timeout
+    cancelled = await app_state.wait_for_tasks(timeout=settings.shutdown_timeout)
     if cancelled > 0:
         logger.warning(
             "tasks_cancelled",
             cancelled_count=cancelled,
-            reason="shutdown_timeout"
+            reason="shutdown_timeout",
+            timeout=settings.shutdown_timeout
         )
 
     # Clear session cache

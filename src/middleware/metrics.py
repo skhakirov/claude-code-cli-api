@@ -11,6 +11,7 @@ class MetricsCollector:
     """Async-safe metrics collector with simple aggregations.
 
     Uses asyncio.Lock for non-blocking async operations.
+    Memory-bounded: limits max unique endpoints tracked.
     """
 
     # Counters
@@ -36,6 +37,9 @@ class MetricsCollector:
     # Status code distribution
     status_codes: Dict[int, int] = field(default_factory=lambda: defaultdict(int))
 
+    # Memory limit
+    max_endpoints: int = 1000
+
     # Async lock (lazy initialized)
     _lock: Optional[asyncio.Lock] = field(default=None, repr=False)
     # Thread lock for safe asyncio.Lock initialization
@@ -50,6 +54,22 @@ class MetricsCollector:
                     self._lock = asyncio.Lock()
         return self._lock
 
+    def _trim_endpoints_if_needed(self) -> None:
+        """Trim endpoints if max_endpoints reached (sync, called under lock)."""
+        if len(self.endpoint_counts) <= self.max_endpoints:
+            return
+
+        # Remove lowest-count endpoints (keep highest traffic endpoints)
+        sorted_endpoints = sorted(
+            self.endpoint_counts.keys(),
+            key=lambda k: self.endpoint_counts[k]
+        )
+        num_to_remove = len(sorted_endpoints) - self.max_endpoints + 1
+
+        for endpoint in sorted_endpoints[:num_to_remove]:
+            del self.endpoint_counts[endpoint]
+            self.endpoint_errors.pop(endpoint, None)
+
     async def record_request(
         self,
         endpoint: str,
@@ -62,6 +82,11 @@ class MetricsCollector:
         """Record a request with all its metrics (async-safe)."""
         async with self._get_lock():
             self.request_count += 1
+
+            # Check endpoint limit before adding new endpoint
+            if endpoint not in self.endpoint_counts:
+                self._trim_endpoints_if_needed()
+
             self.endpoint_counts[endpoint] += 1
             self.status_codes[status_code] += 1
 
