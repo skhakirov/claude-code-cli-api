@@ -32,8 +32,11 @@ jobs:
       - name: Run type checking with mypy
         run: mypy src/ --ignore-missing-imports
 
-      - name: Run tests with coverage
-        run: pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing
+      - name: Run unit and integration tests
+        run: pytest tests/unit tests/integration -v --cov=src --cov-report=xml --cov-report=term-missing
+
+      - name: Run E2E tests
+        run: pytest tests/e2e -v
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
