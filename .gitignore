@@ -113,5 +113,7 @@ CLAUDE.md
 # Local configuration (VPS-specific, contains secrets)
 docs/LOCAL_CONFIG.md
 
-# Production configs (contains local paths)
+# Production configs (contains local paths and secrets)
 docker-compose.prod.yml
+appuser-home/
+workspace/

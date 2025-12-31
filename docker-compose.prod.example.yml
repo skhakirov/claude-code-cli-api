@@ -1,26 +1,38 @@
 # Production configuration for VPS deployment
 # Usage: docker compose -f docker-compose.prod.yml up -d
+#
+# SETUP:
+# 1. Copy this file to docker-compose.prod.yml
+# 2. Create appuser-home/.claude/ directory and copy .credentials.json from ~/.claude/
+# 3. Create workspace/ directory
+# 4. Create .env file from .env.example
+# 5. Adjust ALLOWED_DIRECTORIES and volumes to match your paths
 
 services:
   claude-api:
     build: .
     container_name: claude-code-api
     restart: unless-stopped
+    user: "1000:1000"  # Run as user with UID 1000 (adjust if needed)
     environment:
       - CLAUDE_API_API_KEYS=${CLAUDE_API_API_KEYS}
       - CLAUDE_API_DEFAULT_MODEL=${CLAUDE_API_DEFAULT_MODEL:-claude-sonnet-4-5-20250929}
       - CLAUDE_API_DEFAULT_PERMISSION_MODE=${CLAUDE_API_DEFAULT_PERMISSION_MODE:-acceptEdits}
-      - CLAUDE_API_ALLOWED_DIRECTORIES=${CLAUDE_API_ALLOWED_DIRECTORIES:-["/workspace","/home/lancer/projects"]}
+      - CLAUDE_API_ALLOWED_DIRECTORIES=${CLAUDE_API_ALLOWED_DIRECTORIES:-["/workspace"]}
       - CLAUDE_API_DEFAULT_WORKING_DIRECTORY=${CLAUDE_API_DEFAULT_WORKING_DIRECTORY:-/workspace}
       - CLAUDE_API_LOG_LEVEL=${CLAUDE_API_LOG_LEVEL:-INFO}
+      - HOME=/home/appuser
     volumes:
+      # Working directory for Claude operations
       - ./workspace:/workspace:rw
-      - /home/lancer/projects:/home/lancer/projects:rw
-      - /home/lancer/.claude/.credentials.json:/home/appuser/.claude/.credentials.json:ro
+      # Claude CLI home (must contain .claude/.credentials.json)
+      - ./appuser-home:/home/appuser:rw
+      # Optional: mount your projects directory
+      # - /path/to/your/projects:/projects:rw
     ports:
-      - "127.0.0.1:8002:8000"
+      - "127.0.0.1:8002:8000"  # Expose only to localhost (use nginx for HTTPS)
     networks:
-      - vps_app-network
+      - app-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
@@ -29,5 +41,5 @@ services:
       start_period: 10s
 
 networks:
-  vps_app-network:
-    external: true
+  app-network:
+    external: true  # Create with: docker network create app-network

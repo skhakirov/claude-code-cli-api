@@ -123,7 +123,7 @@ networks:
 
 Claude can only access files in directories specified in `CLAUDE_API_ALLOWED_DIRECTORIES`:
 - `/workspace` — isolated working directory
-- `/home/lancer/projects` — your project files (if configured)
+- Add your project paths as needed (e.g., `/projects`)
 
 ## Troubleshooting
 
