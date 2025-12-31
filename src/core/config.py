@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # Session cache
     session_cache_maxsize: int = 1000
     session_cache_ttl: int = 3600
+    session_persistence_path: str = ""  # Path for file-based session persistence (empty = disabled)
+
+    # Request validation
+    max_request_body_size: int = 150_000  # Max request body size in bytes (150KB)
 
     # Retry configuration
     retry_max_attempts: int = 3

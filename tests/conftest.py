@@ -32,7 +32,10 @@ def mock_settings():
         retry_jitter_max=1.0,
         generator_cleanup_timeout=5.0,
         message_stall_timeout=60.0,
-        max_response_size=10 * 1024 * 1024
+        max_response_size=10 * 1024 * 1024,
+        # P2 settings
+        max_request_body_size=150_000,
+        session_persistence_path="",  # Empty = disabled
     )
 
 

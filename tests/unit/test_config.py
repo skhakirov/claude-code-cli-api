@@ -122,3 +122,35 @@ class TestSettings:
         assert settings.retry_jitter_max == 2.5
         assert settings.generator_cleanup_timeout == 10.0
         assert settings.message_stall_timeout == 120.0
+
+    def test_settings_max_request_body_size(self):
+        """Settings should have max_request_body_size for validation middleware."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test"
+        )
+        assert settings.max_request_body_size == 150_000
+        assert isinstance(settings.max_request_body_size, int)
+
+    def test_settings_session_persistence_path_default_empty(self):
+        """Session persistence path should default to empty (disabled)."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test"
+        )
+        assert settings.session_persistence_path == ""
+
+    def test_settings_custom_persistence_path(self):
+        """Settings should accept custom persistence path."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test",
+            session_persistence_path="/var/data/sessions.json"
+        )
+        assert settings.session_persistence_path == "/var/data/sessions.json"

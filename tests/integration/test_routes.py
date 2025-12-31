@@ -255,6 +255,92 @@ class TestHealthReadyEndpoint:
         assert "is_available" in cb
 
 
+class TestValidationMiddleware:
+    """Tests for P2: Request validation middleware."""
+
+    def test_post_without_content_type_rejected(self, client):
+        """POST without Content-Type is rejected with 415."""
+        # Send raw request without Content-Type
+        response = client.post(
+            "/api/v1/query",
+            content=b'{"prompt": "test"}',
+            headers={"X-API-Key": "test-api-key"}
+        )
+        assert response.status_code == 415
+        assert "application/json" in response.json()["detail"]
+
+    def test_post_with_wrong_content_type_rejected(self, client):
+        """POST with wrong Content-Type is rejected."""
+        response = client.post(
+            "/api/v1/query",
+            content=b'{"prompt": "test"}',
+            headers={
+                "X-API-Key": "test-api-key",
+                "Content-Type": "text/plain"
+            }
+        )
+        assert response.status_code == 415
+
+    def test_post_with_json_content_type_passes(self, mock_settings):
+        """POST with application/json passes validation."""
+        from unittest.mock import patch, MagicMock
+
+        mock_sdk = create_mock_sdk()
+
+        result_msg = MagicMock()
+        result_msg.session_id = "test-123"
+        result_msg.duration_ms = 100
+        result_msg.duration_api_ms = 80
+        result_msg.is_error = False
+        result_msg.num_turns = 1
+        result_msg.total_cost_usd = 0.001
+        result_msg.usage = None
+        result_msg.result = "Done"
+        result_msg.__class__ = mock_sdk['ResultMessage']
+
+        async def async_gen(*args, **kwargs):
+            yield result_msg
+
+        mock_sdk['query'] = async_gen
+
+        with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
+            with patch("src.core.config.get_settings", return_value=mock_settings):
+                from src.api.dependencies import get_executor
+                get_executor.cache_clear()
+
+                from src.api.main import app, app_state
+                app_state.session_cache = None
+
+                from src.middleware.rate_limit import reset_rate_limiter
+                from src.services.circuit_breaker import reset_circuit_breaker
+                reset_rate_limiter()
+                reset_circuit_breaker()
+
+                client = TestClient(app)
+
+                response = client.post(
+                    "/api/v1/query",
+                    json={"prompt": "Hello"},
+                    headers={"X-API-Key": "test-api-key"}
+                )
+
+                # Should pass validation and reach the handler
+                assert response.status_code == 200
+
+    def test_health_endpoint_bypasses_validation(self, client):
+        """Health endpoints are exempt from validation."""
+        response = client.get("/api/v1/health")
+        assert response.status_code == 200
+
+    def test_get_request_bypasses_body_validation(self, client):
+        """GET requests don't require Content-Type."""
+        response = client.get(
+            "/api/v1/sessions",
+            headers={"X-API-Key": "test-api-key"}
+        )
+        assert response.status_code == 200
+
+
 class TestSessionRoutes:
     """Tests for /sessions endpoints."""
 

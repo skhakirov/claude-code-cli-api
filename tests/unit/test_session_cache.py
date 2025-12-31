@@ -281,3 +281,188 @@ class TestStreamingState:
 
         _, _, _, disconnected = await state.get_snapshot()
         assert disconnected is True
+
+
+class TestSessionPersistence:
+    """Tests for P2: File-based session persistence."""
+
+    @pytest.mark.asyncio
+    async def test_persist_to_file_creates_file(self, tmp_path):
+        """Persistence creates file with correct structure."""
+        import json
+        from src.services.session_cache import SessionCache, SessionMetadata
+
+        persistence_file = tmp_path / "sessions.json"
+        cache = SessionCache(
+            maxsize=100,
+            ttl=3600,
+            persistence_path=str(persistence_file)
+        )
+
+        now = datetime.now(timezone.utc)
+        await cache.save("test-1", SessionMetadata(
+            session_id="test-1",
+            created_at=now,
+            last_activity=now,
+            working_directory="/workspace"
+        ))
+
+        result = await cache.persist_to_file()
+        assert result is True
+        assert persistence_file.exists()
+
+        # Verify file structure
+        with open(persistence_file) as f:
+            data = json.load(f)
+
+        assert data["version"] == 1
+        assert len(data["sessions"]) == 1
+        assert data["sessions"][0]["session_id"] == "test-1"
+
+    @pytest.mark.asyncio
+    async def test_persist_without_path_returns_false(self):
+        """Persistence without path returns False."""
+        from src.services.session_cache import SessionCache, SessionMetadata
+
+        cache = SessionCache(maxsize=100, ttl=3600)  # No persistence_path
+
+        now = datetime.now(timezone.utc)
+        await cache.save("test-1", SessionMetadata(
+            session_id="test-1",
+            created_at=now,
+            last_activity=now,
+            working_directory="/workspace"
+        ))
+
+        result = await cache.persist_to_file()
+        assert result is False
+
+    def test_load_from_file_restores_sessions(self, tmp_path):
+        """Load from file restores saved sessions."""
+        import json
+        from src.services.session_cache import SessionCache
+
+        persistence_file = tmp_path / "sessions.json"
+        now = datetime.now(timezone.utc)
+
+        # Create persistence file
+        sessions_data = [{
+            "session_id": "restored-1",
+            "created_at": now.isoformat(),
+            "last_activity": now.isoformat(),
+            "working_directory": "/workspace",
+            "model": "claude-sonnet-4",
+            "prompt_count": 5,
+            "total_cost_usd": 0.025
+        }]
+
+        with open(persistence_file, "w") as f:
+            json.dump({
+                "version": 1,
+                "sessions": sessions_data,
+                "saved_at": now.isoformat()
+            }, f)
+
+        # Load cache from file
+        cache = SessionCache.load_from_file(
+            persistence_path=str(persistence_file),
+            maxsize=100,
+            ttl=3600
+        )
+
+        assert len(cache) == 1
+
+    @pytest.mark.asyncio
+    async def test_load_skips_expired_sessions(self, tmp_path):
+        """Expired sessions are not loaded."""
+        import json
+        from datetime import timedelta
+        from src.services.session_cache import SessionCache
+
+        persistence_file = tmp_path / "sessions.json"
+        now = datetime.now(timezone.utc)
+        old_time = now - timedelta(hours=2)  # 2 hours ago
+
+        sessions_data = [{
+            "session_id": "expired-1",
+            "created_at": old_time.isoformat(),
+            "last_activity": old_time.isoformat(),
+            "working_directory": "/workspace",
+            "prompt_count": 0,
+            "total_cost_usd": 0
+        }]
+
+        with open(persistence_file, "w") as f:
+            json.dump({
+                "version": 1,
+                "sessions": sessions_data,
+                "saved_at": old_time.isoformat()
+            }, f)
+
+        # Load with 1 hour TTL - session should be skipped
+        cache = SessionCache.load_from_file(
+            persistence_path=str(persistence_file),
+            maxsize=100,
+            ttl=3600  # 1 hour TTL
+        )
+
+        assert len(cache) == 0  # Expired session not loaded
+
+    def test_load_from_nonexistent_file_returns_empty(self, tmp_path):
+        """Loading from nonexistent file returns empty cache."""
+        from src.services.session_cache import SessionCache
+
+        persistence_file = tmp_path / "nonexistent.json"
+
+        cache = SessionCache.load_from_file(
+            persistence_path=str(persistence_file),
+            maxsize=100,
+            ttl=3600
+        )
+
+        assert len(cache) == 0
+
+    def test_load_from_invalid_json_returns_empty(self, tmp_path):
+        """Loading from invalid JSON returns empty cache."""
+        from src.services.session_cache import SessionCache
+
+        persistence_file = tmp_path / "invalid.json"
+        with open(persistence_file, "w") as f:
+            f.write("not valid json{")
+
+        cache = SessionCache.load_from_file(
+            persistence_path=str(persistence_file),
+            maxsize=100,
+            ttl=3600
+        )
+
+        assert len(cache) == 0
+
+    @pytest.mark.asyncio
+    async def test_persist_atomic_no_temp_files_left(self, tmp_path):
+        """Atomic persistence doesn't leave temp files."""
+        from src.services.session_cache import SessionCache, SessionMetadata
+
+        persistence_file = tmp_path / "sessions.json"
+        cache = SessionCache(
+            maxsize=100,
+            ttl=3600,
+            persistence_path=str(persistence_file)
+        )
+
+        now = datetime.now(timezone.utc)
+        await cache.save("test-atomic", SessionMetadata(
+            session_id="test-atomic",
+            created_at=now,
+            last_activity=now,
+            working_directory="/workspace"
+        ))
+
+        result = await cache.persist_to_file()
+
+        assert result is True
+        assert persistence_file.exists()
+
+        # No temp files should remain
+        temp_files = list(tmp_path.glob(".session_cache_*.tmp"))
+        assert len(temp_files) == 0
