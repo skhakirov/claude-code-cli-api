@@ -1,147 +1,149 @@
 # Claude Code CLI API Wrapper
 
-Headless HTTP API сервис для Claude Code CLI, построенный на [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Позволяет интегрировать возможности Claude Code в любые приложения через REST API.
+Headless HTTP API service for Claude Code CLI, built on [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Enables integration of Claude Code capabilities into any application via REST API.
 
-## Возможности
+## Features
 
-- **REST API** для взаимодействия с Claude Code
-- **Streaming (SSE)** для real-time ответов
-- **Stateless режим** - одноразовые запросы с чистым контекстом
-- **Session management** - продолжение диалогов при необходимости
-- **Tools support** - Claude может читать/писать файлы, выполнять команды
-- **MCP servers** - подключение внешних инструментов
-- **API Key authentication** - защита endpoints
+- **REST API** for interacting with Claude Code
+- **Streaming (SSE)** for real-time responses
+- **Stateless mode** - one-shot requests with clean context
+- **Session management** - continue conversations when needed
+- **Tools support** - Claude can read/write files, execute commands
+- **MCP servers** - connect external tools
+- **API Key authentication** - secure endpoints
+- **Circuit breaker** - automatic failure handling
+- **Retry logic** - exponential backoff for transient errors
 
-## Режимы использования
+## Usage Modes
 
-### Stateless (одноразовые запросы)
+### Stateless (One-Shot Requests)
 
-Для задач парсинга, анализа данных и других операций, где **не нужна история диалога** и важен чистый контекст:
+For parsing, data analysis, and other operations where **conversation history is not needed** and clean context is important:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/query \
   -H "X-API-Key: your-key" \
   -H "Content-Type: application/json" \
   -d '{
-    "prompt": "Распарси этот JSON и верни только email адреса: {\"users\": [{\"email\": \"a@test.com\"}, {\"email\": \"b@test.com\"}]}",
+    "prompt": "Parse this JSON and return only email addresses: {\"users\": [{\"email\": \"a@test.com\"}, {\"email\": \"b@test.com\"}]}",
     "max_turns": 1
   }'
 ```
 
-**Каждый запрос без `resume` создаёт новую сессию с чистым контекстом.** Claude не помнит предыдущие запросы.
+**Each request without `resume` creates a new session with clean context.** Claude does not remember previous requests.
 
-Рекомендации для stateless режима:
-- **Не используйте** `resume` или `continue_conversation`
-- Ставьте `max_turns: 1` для простых задач (быстрее и дешевле)
-- Каждый запрос полностью независим от предыдущих
+Recommendations for stateless mode:
+- **Do not use** `resume` or `continue_conversation`
+- Set `max_turns: 1` for simple tasks (faster and cheaper)
+- Each request is completely independent from previous ones
 
-### Stateful (диалоговые сессии)
+### Stateful (Dialog Sessions)
 
-Для многошаговых задач, где Claude должен помнить контекст:
+For multi-step tasks where Claude needs to remember context:
 
 ```bash
-# Первый запрос - создаёт сессию
+# First request - creates session
 curl -X POST http://localhost:8000/api/v1/query \
   -H "X-API-Key: your-key" \
-  -d '{"prompt": "Прочитай файл config.json"}'
+  -d '{"prompt": "Read file config.json"}'
 # Response: {"session_id": "abc-123", ...}
 
-# Второй запрос - продолжает сессию
+# Second request - continues session
 curl -X POST http://localhost:8000/api/v1/query \
   -H "X-API-Key: your-key" \
-  -d '{"prompt": "Теперь измени порт на 8080", "resume": "abc-123"}'
+  -d '{"prompt": "Now change the port to 8080", "resume": "abc-123"}'
 ```
 
-Claude помнит весь предыдущий контекст сессии.
+Claude remembers all previous session context.
 
-## Быстрый старт
+## Quick Start
 
-### Требования
+### Requirements
 
 - Python 3.10+
-- Claude Code CLI авторизация (см. ниже)
+- Claude Code CLI authorization (see below)
 
-### Авторизация Claude Code
+### Claude Code Authorization
 
-API использует Claude Agent SDK, который внутри вызывает Claude Code CLI. CLI должен быть авторизован.
+The API uses Claude Agent SDK, which internally calls Claude Code CLI. The CLI must be authorized.
 
-**Вариант 1: OAuth (рекомендуется для Claude Max/Pro подписок)**
+**Option 1: OAuth (recommended for Claude Max/Pro subscriptions)**
 
 ```bash
-# SDK включает bundled CLI, авторизация:
+# SDK includes bundled CLI, authorization:
 ~/.local/lib/python3.10/site-packages/claude_agent_sdk/_bundled/claude login
 
-# Или через симлинк:
+# Or via symlink:
 ln -s ~/.local/lib/python3.10/site-packages/claude_agent_sdk/_bundled/claude /usr/local/bin/claude
 claude login
 ```
 
-После авторизации credentials сохраняются в `~/.claude/.credentials.json`.
+After authorization, credentials are saved to `~/.claude/.credentials.json`.
 
-**Вариант 2: API Key**
+**Option 2: API Key**
 
-Для использования с ANTHROPIC_API_KEY:
+For use with ANTHROPIC_API_KEY:
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**Проверка авторизации:**
+**Verify authorization:**
 
 ```bash
-# Проверить версию CLI
+# Check CLI version
 ~/.local/lib/python3.10/site-packages/claude_agent_sdk/_bundled/claude --version
 
-# Тестовый запрос
+# Test request
 echo "Hello" | ~/.local/lib/python3.10/site-packages/claude_agent_sdk/_bundled/claude -p
 ```
 
-### Установка
+### Installation
 
 ```bash
-# Клонирование репозитория
-git clone https://github.com/skhakirov/claude_code_cli_api.git
-cd claude_code_cli_api
+# Clone repository
+git clone https://github.com/skhakirov/claude-code-cli-api.git
+cd claude-code-cli-api
 
-# Установка зависимостей
+# Install dependencies
 pip install -r requirements.txt
 
-# Создание конфигурации
+# Create configuration
 cp .env.example .env
-# Отредактируйте .env файл
+# Edit .env file
 ```
 
-### Конфигурация (.env)
+### Configuration (.env)
 
 ```bash
-# API ключи для аутентификации клиентов (JSON array)
+# API keys for client authentication (JSON array)
 CLAUDE_API_API_KEYS=["your-api-key-here"]
 
-# Модель Claude по умолчанию
+# Default Claude model
 CLAUDE_API_DEFAULT_MODEL=claude-sonnet-4-20250514
 
-# Максимум итераций агента (1-100)
+# Maximum agent iterations (1-100)
 CLAUDE_API_DEFAULT_MAX_TURNS=20
 
-# Таймаут выполнения в секундах (1-600)
+# Execution timeout in seconds (1-600)
 CLAUDE_API_DEFAULT_TIMEOUT=300
 
-# Режим разрешений: default | acceptEdits | plan | bypassPermissions
+# Permission mode: default | acceptEdits | plan | bypassPermissions
 CLAUDE_API_DEFAULT_PERMISSION_MODE=acceptEdits
 
-# Разрешённые директории для работы (JSON array)
+# Allowed working directories (JSON array)
 CLAUDE_API_ALLOWED_DIRECTORIES=["/workspace","/tmp"]
 
-# Рабочая директория по умолчанию
+# Default working directory
 CLAUDE_API_DEFAULT_WORKING_DIRECTORY=/workspace
 
-# TTL кэша сессий в секундах
+# Session cache TTL in seconds
 CLAUDE_API_SESSION_CACHE_TTL=3600
 
-# Уровень логирования: DEBUG | INFO | WARNING | ERROR
+# Log level: DEBUG | INFO | WARNING | ERROR
 CLAUDE_API_LOG_LEVEL=INFO
 ```
 
-### Запуск
+### Running
 
 ```bash
 # Development
@@ -151,15 +153,15 @@ uvicorn src.api.main:app --reload --port 8000
 uvicorn src.api.main:app --host 0.0.0.0 --port 8000
 ```
 
-API доступен на `http://localhost:8000`
+API available at `http://localhost:8000`
 
 ---
 
 ## API Reference
 
-### Аутентификация
+### Authentication
 
-Все endpoints (кроме `/health`) требуют заголовок `X-API-Key`:
+All endpoints (except `/health`) require `X-API-Key` header:
 
 ```bash
 curl -H "X-API-Key: your-api-key" http://localhost:8000/api/v1/query
@@ -169,42 +171,42 @@ curl -H "X-API-Key: your-api-key" http://localhost:8000/api/v1/query
 
 ### POST /api/v1/query
 
-Выполняет запрос к Claude и возвращает полный ответ.
+Executes a query to Claude and returns the complete response.
 
 #### Request Body
 
-| Поле | Тип | Обязательный | По умолчанию | Описание |
-|------|-----|--------------|--------------|----------|
-| `prompt` | string | **Да** | - | Текст запроса (1-100000 символов) |
-| `model` | string | Нет | из конфига | Модель Claude (`claude-sonnet-4-20250514`, `claude-opus-4-20250514`) |
-| `max_turns` | integer | Нет | 20 | Максимум итераций агента (1-100) |
-| `timeout` | integer | Нет | 300 | Таймаут в секундах (1-600) |
-| `working_directory` | string | Нет | из конфига | Рабочая директория для Claude |
-| `permission_mode` | string | Нет | `acceptEdits` | Режим разрешений (см. ниже) |
-| `allowed_tools` | string[] | Нет | все | Список разрешённых инструментов |
-| `disallowed_tools` | string[] | Нет | [] | Список запрещённых инструментов |
-| `system_prompt` | string | Нет | null | Кастомный системный промпт |
-| `resume` | string | Нет | null | ID сессии для продолжения |
-| `continue_conversation` | boolean | Нет | false | Продолжить последнюю сессию |
-| `fork_session` | boolean | Нет | false | Создать форк при resume |
-| `mcp_servers` | object | Нет | {} | Конфигурация MCP серверов |
-| `include_partial_messages` | boolean | Нет | false | Включить частичные сообщения |
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `prompt` | string | **Yes** | - | Query text (1-100000 characters) |
+| `model` | string | No | from config | Claude model (`claude-sonnet-4-20250514`, `claude-opus-4-20250514`) |
+| `max_turns` | integer | No | 20 | Maximum agent iterations (1-100) |
+| `timeout` | integer | No | 300 | Timeout in seconds (1-600) |
+| `working_directory` | string | No | from config | Working directory for Claude |
+| `permission_mode` | string | No | `acceptEdits` | Permission mode (see below) |
+| `allowed_tools` | string[] | No | all | List of allowed tools |
+| `disallowed_tools` | string[] | No | [] | List of disallowed tools |
+| `system_prompt` | string | No | null | Custom system prompt |
+| `resume` | string | No | null | Session ID to continue |
+| `continue_conversation` | boolean | No | false | Continue last session |
+| `fork_session` | boolean | No | false | Create fork on resume |
+| `mcp_servers` | object | No | {} | MCP servers configuration |
+| `include_partial_messages` | boolean | No | false | Include partial messages |
 
 #### Permission Modes
 
-| Режим | Описание |
-|-------|----------|
-| `default` | Запрашивает подтверждение для опасных операций |
-| `acceptEdits` | Автоматически принимает редактирование файлов |
-| `plan` | Только планирование, без выполнения |
-| `bypassPermissions` | Пропускает все проверки разрешений |
+| Mode | Description |
+|------|-------------|
+| `default` | Asks for confirmation on dangerous operations |
+| `acceptEdits` | Automatically accepts file edits |
+| `plan` | Planning only, no execution |
+| `bypassPermissions` | Skips all permission checks |
 
 #### Response
 
 ```json
 {
-  "result": "Текстовый ответ Claude",
-  "session_id": "uuid-сессии",
+  "result": "Claude's text response",
+  "session_id": "session-uuid",
   "status": "success",
   "duration_ms": 4737,
   "duration_api_ms": 4023,
@@ -231,52 +233,52 @@ curl -H "X-API-Key: your-api-key" http://localhost:8000/api/v1/query
 
 #### Response Fields
 
-| Поле | Тип | Описание |
-|------|-----|----------|
-| `result` | string | Агрегированный текстовый ответ |
-| `session_id` | string | UUID сессии для продолжения диалога |
+| Field | Type | Description |
+|-------|------|-------------|
+| `result` | string | Aggregated text response |
+| `session_id` | string | Session UUID for continuing dialog |
 | `status` | string | `success` \| `error` \| `timeout` |
-| `duration_ms` | integer | Общее время выполнения (мс) |
-| `duration_api_ms` | integer | Время API вызовов (мс) |
-| `is_error` | boolean | Флаг ошибки |
-| `num_turns` | integer | Количество итераций агента |
-| `total_cost_usd` | float | Стоимость запроса в USD |
-| `usage` | object | Использование токенов |
-| `model` | string | Использованная модель |
-| `tool_calls` | array | Список вызовов инструментов |
-| `thinking` | array | Блоки размышлений (для reasoning моделей) |
-| `error` | string | Сообщение об ошибке (если есть) |
+| `duration_ms` | integer | Total execution time (ms) |
+| `duration_api_ms` | integer | API call time (ms) |
+| `is_error` | boolean | Error flag |
+| `num_turns` | integer | Number of agent iterations |
+| `total_cost_usd` | float | Request cost in USD |
+| `usage` | object | Token usage |
+| `model` | string | Model used |
+| `tool_calls` | array | List of tool calls |
+| `thinking` | array | Thinking blocks (for reasoning models) |
+| `error` | string | Error message (if any) |
 
-#### Примеры
+#### Examples
 
-**Простой запрос:**
+**Simple request:**
 ```bash
 curl -X POST http://localhost:8000/api/v1/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"prompt": "Объясни что такое recursion"}'
+  -d '{"prompt": "Explain what recursion is"}'
 ```
 
-**Запрос с чтением файла:**
+**Request with file reading:**
 ```bash
 curl -X POST http://localhost:8000/api/v1/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
   -d '{
-    "prompt": "Прочитай README.md и сделай краткое резюме",
+    "prompt": "Read README.md and create a brief summary",
     "working_directory": "/path/to/project",
     "allowed_tools": ["Read"],
     "max_turns": 3
   }'
 ```
 
-**Продолжение сессии:**
+**Continue session:**
 ```bash
 curl -X POST http://localhost:8000/api/v1/query \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
   -d '{
-    "prompt": "А теперь объясни подробнее",
+    "prompt": "Now explain in more detail",
     "resume": "previous-session-uuid"
   }'
 ```
@@ -285,11 +287,11 @@ curl -X POST http://localhost:8000/api/v1/query \
 
 ### POST /api/v1/query/stream
 
-Выполняет запрос с потоковой передачей ответа через Server-Sent Events (SSE).
+Executes query with streaming response via Server-Sent Events (SSE).
 
 #### Request Body
 
-Идентичен `/api/v1/query`.
+Identical to `/api/v1/query`.
 
 #### Response (SSE Stream)
 
@@ -298,7 +300,7 @@ event: init
 data: {"type": "system", "session_id": "uuid", "tools": [...], "model": "..."}
 
 event: text
-data: {"text": "Частичный ответ...", "model": "claude-sonnet-4-20250514"}
+data: {"text": "Partial response...", "model": "claude-sonnet-4-20250514"}
 
 event: tool_use
 data: {"id": "toolu_xxx", "name": "Read", "input": {...}}
@@ -307,41 +309,41 @@ event: tool_result
 data: {"tool_use_id": "toolu_xxx", "content": "..."}
 
 event: thinking
-data: {"thinking": "Размышления модели..."}
+data: {"thinking": "Model reasoning..."}
 
 event: result
 data: {"session_id": "uuid", "total_cost_usd": 0.007, "num_turns": 1, "is_error": false}
 
 event: error
-data: {"error": "Описание ошибки"}
+data: {"error": "Error description"}
 ```
 
 #### SSE Event Types
 
-| Event | Описание |
-|-------|----------|
-| `init` | Инициализация сессии (tools, model, session_id) |
-| `text` | Текстовый чанк ответа |
-| `tool_use` | Claude вызывает инструмент |
-| `tool_result` | Результат выполнения инструмента |
-| `thinking` | Блок размышлений |
-| `result` | Финальный результат с метриками |
-| `error` | Ошибка выполнения |
+| Event | Description |
+|-------|-------------|
+| `init` | Session initialization (tools, model, session_id) |
+| `text` | Text chunk of response |
+| `tool_use` | Claude calls a tool |
+| `tool_result` | Tool execution result |
+| `thinking` | Thinking block |
+| `result` | Final result with metrics |
+| `error` | Execution error |
 
-#### Пример
+#### Example
 
 ```bash
 curl -N http://localhost:8000/api/v1/query/stream \
   -H "Content-Type: application/json" \
   -H "X-API-Key: your-key" \
-  -d '{"prompt": "Напиши функцию сортировки"}'
+  -d '{"prompt": "Write a sorting function"}'
 ```
 
 ---
 
 ### GET /api/v1/sessions
 
-Возвращает список всех закэшированных сессий.
+Returns list of all cached sessions.
 
 #### Response
 
@@ -363,7 +365,7 @@ curl -N http://localhost:8000/api/v1/query/stream \
 
 ### GET /api/v1/sessions/{session_id}
 
-Возвращает метаданные конкретной сессии.
+Returns metadata for specific session.
 
 #### Response
 
@@ -381,15 +383,15 @@ curl -N http://localhost:8000/api/v1/query/stream \
 
 #### Errors
 
-| Status | Описание |
-|--------|----------|
-| 404 | Сессия не найдена |
+| Status | Description |
+|--------|-------------|
+| 404 | Session not found |
 
 ---
 
 ### DELETE /api/v1/sessions/{session_id}
 
-Удаляет сессию из кэша.
+Deletes session from cache.
 
 #### Response
 
@@ -404,7 +406,7 @@ curl -N http://localhost:8000/api/v1/query/stream \
 
 ### GET /api/v1/health
 
-Health check endpoint. **Не требует аутентификации.**
+Basic health check endpoint. **Does not require authentication.**
 
 #### Response
 
@@ -417,28 +419,115 @@ Health check endpoint. **Не требует аутентификации.**
 
 ---
 
-## Доступные инструменты Claude
+### GET /api/v1/health/ready
 
-При работе через API, Claude имеет доступ к следующим инструментам:
+Detailed readiness check endpoint. **Does not require authentication.** Use for Kubernetes/Docker readiness probes.
 
-| Tool | Описание |
-|------|----------|
-| `Read` | Чтение файлов |
-| `Write` | Запись файлов |
-| `Edit` | Редактирование файлов |
-| `Bash` | Выполнение shell команд |
-| `Glob` | Поиск файлов по паттерну |
-| `Grep` | Поиск в содержимом файлов |
-| `Task` | Запуск подзадач |
-| `WebFetch` | Загрузка веб-страниц |
-| `WebSearch` | Поиск в интернете |
-| `NotebookEdit` | Редактирование Jupyter notebooks |
-
-### Ограничение инструментов
+#### Response
 
 ```json
 {
-  "prompt": "Прочитай файл config.json",
+  "status": "healthy",
+  "version": "1.0.0",
+  "cache": {
+    "status": "healthy",
+    "sessions_count": 5,
+    "max_size": 1000
+  },
+  "sdk": {
+    "status": "healthy",
+    "available": true,
+    "version": "0.1.18"
+  },
+  "memory": {
+    "rss_mb": 128.5,
+    "peak_mb": 256.0,
+    "vms_mb": 512.0,
+    "status": "healthy"
+  },
+  "disk": {
+    "free_gb": 50.0,
+    "total_gb": 100.0,
+    "used_percent": 50.0,
+    "status": "healthy"
+  },
+  "circuit_breaker": {
+    "state": "closed",
+    "failure_count": 0,
+    "is_available": true
+  },
+  "active_tasks": 2
+}
+```
+
+#### Status Values
+
+| Component | Status Values |
+|-----------|---------------|
+| Overall | `healthy`, `degraded`, `unhealthy` |
+| Cache | `healthy`, `full` |
+| SDK | `healthy`, `unavailable` |
+| Memory | `healthy`, `high`, `critical` |
+| Disk | `healthy`, `warning`, `critical` |
+| Circuit Breaker | `closed`, `open`, `half_open` |
+
+---
+
+### GET /api/v1/metrics
+
+Application metrics endpoint. **Does not require authentication.** Use for monitoring dashboards.
+
+#### Response
+
+```json
+{
+  "requests_total": 1000,
+  "requests_error": 10,
+  "tokens_input": 50000,
+  "tokens_output": 25000,
+  "latency_histogram": {
+    "p50": 1500,
+    "p95": 3000,
+    "p99": 5000
+  },
+  "endpoints": {
+    "/api/v1/query": {
+      "count": 800,
+      "errors": 5
+    }
+  },
+  "status_codes": {
+    "200": 980,
+    "401": 10,
+    "500": 5
+  }
+}
+```
+
+---
+
+## Available Claude Tools
+
+When working through the API, Claude has access to the following tools:
+
+| Tool | Description |
+|------|-------------|
+| `Read` | Read files |
+| `Write` | Write files |
+| `Edit` | Edit files |
+| `Bash` | Execute shell commands |
+| `Glob` | Search files by pattern |
+| `Grep` | Search in file contents |
+| `Task` | Run subtasks |
+| `WebFetch` | Fetch web pages |
+| `WebSearch` | Search the internet |
+| `NotebookEdit` | Edit Jupyter notebooks |
+
+### Limiting Tools
+
+```json
+{
+  "prompt": "Read file config.json",
   "allowed_tools": ["Read"],
   "disallowed_tools": ["Bash", "Write"]
 }
@@ -446,7 +535,7 @@ Health check endpoint. **Не требует аутентификации.**
 
 ---
 
-## Интеграции
+## Integrations
 
 ### Python
 
@@ -466,9 +555,9 @@ async def query_claude(prompt: str, **kwargs) -> dict:
         )
         return response.json()
 
-# Использование
+# Usage
 result = await query_claude(
-    "Напиши функцию fibonacci",
+    "Write a fibonacci function",
     max_turns=5,
     allowed_tools=["Write"]
 )
@@ -544,8 +633,8 @@ async function* streamClaude(prompt: string) {
 
 ### n8n Integration
 
-1. Используйте **HTTP Request** node
-2. Настройте:
+1. Use **HTTP Request** node
+2. Configure:
    - Method: `POST`
    - URL: `http://your-server:8000/api/v1/query`
    - Authentication: Header Auth
@@ -616,7 +705,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
-### docker-compose.yml (локальная разработка)
+### docker-compose.yml (local development)
 
 ```yaml
 services:
@@ -635,7 +724,7 @@ services:
       - "8000:8000"
 ```
 
-### docker-compose.yml (production с Traefik)
+### docker-compose.yml (production with Traefik)
 
 ```yaml
 services:
@@ -670,111 +759,173 @@ networks:
     external: true
 ```
 
-### Запуск
+### Running
 
 ```bash
-# Сборка и запуск
+# Build and run
 docker-compose up -d
 
-# Логи
+# Logs
 docker-compose logs -f claude-api
 ```
 
-### Важно: Claude авторизация в Docker
+### Important: Claude Authorization in Docker
 
-Claude CLI использует авторизацию из `~/.claude/.credentials.json`. Для Docker:
+Claude CLI uses authorization from `~/.claude/.credentials.json`. For Docker:
 
-1. **OAuth (рекомендуется)**: Авторизуйтесь на хост-машине через `claude login`, затем примонтируйте credentials:
+1. **OAuth (recommended)**: Authorize on host machine via `claude login`, then mount credentials:
    ```yaml
    volumes:
      - ~/.claude:/home/appuser/.claude:ro
    ```
 
-2. **API Key**: Установите `ANTHROPIC_API_KEY` в environment
+2. **API Key**: Set `ANTHROPIC_API_KEY` in environment
 
 ---
 
-## Коды ошибок
+## Error Codes
 
-| HTTP Code | Описание |
-|-----------|----------|
-| 200 | Успешный запрос |
-| 400 | Невалидный запрос или path traversal |
-| 401 | Отсутствует или неверный API ключ |
-| 403 | Доступ к директории запрещён |
-| 404 | Сессия не найдена |
-| 422 | Ошибка валидации параметров |
-| 500 | Внутренняя ошибка сервера или Claude SDK |
-| 502 | Ошибка соединения с Claude |
-| 503 | Claude CLI недоступен |
+| HTTP Code | Description |
+|-----------|-------------|
+| 200 | Successful request |
+| 400 | Invalid request or path traversal |
+| 401 | Missing or invalid API key |
+| 403 | Directory access denied |
+| 404 | Session not found |
+| 413 | Request body too large |
+| 415 | Unsupported media type |
+| 422 | Parameter validation error |
+| 500 | Internal server error or Claude SDK error |
+| 502 | Claude connection error |
+| 503 | Claude CLI unavailable or circuit breaker open |
+| 504 | Execution timeout |
 
 ---
 
-## Безопасность
+## Security
 
 ### Path Traversal Protection
 
-API защищает от path traversal атак:
-- Все пути нормализуются
-- Проверяется принадлежность к `allowed_directories`
-- Паттерны вроде `../` блокируются
+The API protects against path traversal attacks:
+- All paths are normalized
+- Checked for belonging to `allowed_directories`
+- Patterns like `../` are blocked
 
 ### API Key Authentication
 
-- Все endpoints (кроме `/health`) требуют валидный API ключ
-- Ключи передаются через заголовок `X-API-Key`
-- Поддержка нескольких ключей для ротации
+- All endpoints (except `/health`) require a valid API key
+- Keys are passed via `X-API-Key` header
+- Multiple keys supported for rotation
 
-### Рекомендации
+### Recommendations
 
-1. Используйте HTTPS в production (через reverse proxy)
-2. Ограничьте `allowed_directories` минимально необходимыми путями
-3. Используйте `permission_mode: acceptEdits` вместо `bypassPermissions`
-4. Регулярно ротируйте API ключи
-5. Настройте rate limiting на уровне reverse proxy
+1. Use HTTPS in production (via reverse proxy)
+2. Limit `allowed_directories` to minimum necessary paths
+3. Use `permission_mode: acceptEdits` instead of `bypassPermissions`
+4. Regularly rotate API keys
+5. Configure rate limiting at reverse proxy level
 
 ---
 
-## Тестирование
+## Testing
 
 ```bash
-# Все тесты
+# All tests
 pytest tests/ -v
 
-# С покрытием
+# With coverage
 pytest tests/ --cov=src --cov-report=html
 
-# Только unit тесты
+# Unit tests only
 pytest tests/unit/ -v
 
-# Только интеграционные
+# Integration tests only
 pytest tests/integration/ -v
+
+# E2E tests only
+pytest tests/e2e/ -v
 ```
 
 ---
 
-## Переменные окружения
+## Environment Variables
 
-| Переменная | Обязательная | По умолчанию | Описание |
-|------------|--------------|--------------|----------|
-| `CLAUDE_API_API_KEYS` | Да | - | JSON array API ключей |
-| `CLAUDE_API_DEFAULT_MODEL` | Нет | `claude-sonnet-4-20250514` | Модель по умолчанию |
-| `CLAUDE_API_DEFAULT_MAX_TURNS` | Нет | `20` | Макс. итераций |
-| `CLAUDE_API_DEFAULT_TIMEOUT` | Нет | `300` | Таймаут (сек) |
-| `CLAUDE_API_DEFAULT_PERMISSION_MODE` | Нет | `acceptEdits` | Режим разрешений |
-| `CLAUDE_API_ALLOWED_DIRECTORIES` | Нет | `["/workspace"]` | Разрешённые пути |
-| `CLAUDE_API_DEFAULT_WORKING_DIRECTORY` | Нет | `/workspace` | Рабочая директория |
-| `CLAUDE_API_SESSION_CACHE_MAXSIZE` | Нет | `1000` | Макс. сессий в кэше |
-| `CLAUDE_API_SESSION_CACHE_TTL` | Нет | `3600` | TTL кэша (сек) |
-| `CLAUDE_API_LOG_LEVEL` | Нет | `INFO` | Уровень логов |
+### Core Settings
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CLAUDE_API_API_KEYS` | Yes | - | JSON array of API keys |
+| `ANTHROPIC_API_KEY` | No* | - | Anthropic API key (alternative to OAuth) |
+| `CLAUDE_API_DEFAULT_MODEL` | No | `claude-sonnet-4-20250514` | Default model |
+| `CLAUDE_API_DEFAULT_MAX_TURNS` | No | `20` | Max iterations (1-100) |
+| `CLAUDE_API_DEFAULT_TIMEOUT` | No | `300` | Timeout in seconds (1-600) |
+| `CLAUDE_API_DEFAULT_PERMISSION_MODE` | No | `acceptEdits` | Permission mode |
+| `CLAUDE_API_ALLOWED_DIRECTORIES` | No | `["/workspace"]` | Allowed paths (JSON array) |
+| `CLAUDE_API_DEFAULT_WORKING_DIRECTORY` | No | `/workspace` | Working directory |
+| `CLAUDE_API_LOG_LEVEL` | No | `INFO` | Log level (DEBUG, INFO, WARNING, ERROR) |
+
+### Session Cache
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_API_SESSION_CACHE_MAXSIZE` | `1000` | Max sessions in cache |
+| `CLAUDE_API_SESSION_CACHE_TTL` | `3600` | Cache TTL in seconds |
+| `CLAUDE_API_SESSION_PERSISTENCE_PATH` | `` | Path for file-based persistence (empty = disabled) |
+
+### Request Validation
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_API_MAX_REQUEST_BODY_SIZE` | `150000` | Max request body size in bytes (150KB) |
+| `CLAUDE_API_MAX_RESPONSE_SIZE` | `10485760` | Max response size in bytes (10MB) |
+
+### Rate Limiting
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_API_RATE_LIMIT_REQUESTS_PER_SECOND` | `10.0` | Requests per second limit |
+| `CLAUDE_API_RATE_LIMIT_BURST_SIZE` | `20` | Burst size for rate limiting |
+
+### Retry Logic
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_API_RETRY_MAX_ATTEMPTS` | `3` | Max retry attempts |
+| `CLAUDE_API_RETRY_MIN_WAIT` | `1.0` | Min wait between retries (sec) |
+| `CLAUDE_API_RETRY_MAX_WAIT` | `10.0` | Max wait between retries (sec) |
+| `CLAUDE_API_RETRY_MULTIPLIER` | `2.0` | Exponential backoff multiplier |
+| `CLAUDE_API_RETRY_JITTER_MAX` | `1.0` | Max random jitter (sec) |
+
+### Circuit Breaker
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_API_CIRCUIT_BREAKER_FAILURE_THRESHOLD` | `5` | Failures before circuit opens |
+| `CLAUDE_API_CIRCUIT_BREAKER_SUCCESS_THRESHOLD` | `2` | Successes to close circuit |
+| `CLAUDE_API_CIRCUIT_BREAKER_TIMEOUT` | `30.0` | Time in open state (sec) |
+
+### Graceful Shutdown
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_API_SHUTDOWN_TIMEOUT` | `30.0` | Graceful shutdown timeout (sec) |
+| `CLAUDE_API_GENERATOR_CLEANUP_TIMEOUT` | `5.0` | SDK generator cleanup timeout (sec) |
+| `CLAUDE_API_MESSAGE_STALL_TIMEOUT` | `60.0` | Stalled message detection timeout (sec) |
+
+### Alerting (Optional)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `CLAUDE_API_ALERT_WEBHOOK_URL` | `` | Webhook URL for critical alerts (empty = disabled) |
+| `CLAUDE_API_ALERT_WEBHOOK_TIMEOUT` | `5.0` | Webhook request timeout (sec) |
 
 ---
 
-## Лицензия
+## License
 
 MIT
 
-## Ссылки
+## Links
 
 - [Claude Agent SDK (Python)](https://github.com/anthropics/claude-agent-sdk-python)
 - [SDK Documentation](https://platform.claude.com/docs/en/agent-sdk/python)
