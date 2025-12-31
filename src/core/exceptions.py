@@ -38,6 +38,11 @@ class SessionNotFoundError(ClaudeAPIError):
     pass
 
 
+class CircuitOpenError(ClaudeAPIError):
+    """Circuit breaker is open, service temporarily unavailable."""
+    pass
+
+
 # SDK error mapping to HTTP status codes
 # Source: https://platform.claude.com/docs/en/agent-sdk/python#error-types
 # Note: SDK exceptions are imported dynamically to avoid import errors when SDK not installed
@@ -45,6 +50,7 @@ SDK_ERROR_MAPPING: dict[Type[Exception], tuple[int, str]] = {
     PathTraversalError: (400, "Invalid path"),
     UnauthorizedDirectoryError: (403, "Directory access denied"),
     SessionNotFoundError: (404, "Session not found"),
+    CircuitOpenError: (503, "Service temporarily unavailable"),
 }
 
 

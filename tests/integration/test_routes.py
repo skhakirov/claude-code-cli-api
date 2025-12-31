@@ -66,6 +66,12 @@ def client(mock_settings, mock_sdk):
             from src.api.main import app_state
             app_state.session_cache = None
 
+            # Reset rate limiter and circuit breaker
+            from src.middleware.rate_limit import reset_rate_limiter
+            from src.services.circuit_breaker import reset_circuit_breaker
+            reset_rate_limiter()
+            reset_circuit_breaker()
+
             from src.api.main import app
             return TestClient(app)
 
@@ -115,6 +121,12 @@ class TestQueryRoutes:
 
                 from src.api.main import app, app_state
                 app_state.session_cache = None
+
+                from src.middleware.rate_limit import reset_rate_limiter
+                from src.services.circuit_breaker import reset_circuit_breaker
+                reset_rate_limiter()
+                reset_circuit_breaker()
+
                 client = TestClient(app)
 
                 response = client.post(
@@ -163,6 +175,12 @@ class TestQueryRoutes:
 
                 from src.api.main import app, app_state
                 app_state.session_cache = None
+
+                from src.middleware.rate_limit import reset_rate_limiter
+                from src.services.circuit_breaker import reset_circuit_breaker
+                reset_rate_limiter()
+                reset_circuit_breaker()
+
                 client = TestClient(app)
 
                 response = client.post(

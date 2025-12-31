@@ -5,6 +5,8 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from ...core.config import get_settings
+from ...middleware.metrics import get_metrics
+from ...services.circuit_breaker import get_circuit_breaker
 from ..state import app_state
 
 router = APIRouter(tags=["Health"])
@@ -36,6 +38,13 @@ class MemoryStatus(BaseModel):
     status: str
 
 
+class CircuitBreakerStatus(BaseModel):
+    """Circuit breaker status info."""
+    state: str
+    failure_count: int
+    is_available: bool
+
+
 class ReadyResponse(BaseModel):
     """Detailed readiness check response."""
     status: str
@@ -43,6 +52,7 @@ class ReadyResponse(BaseModel):
     cache: CacheStatus
     sdk: SDKStatus
     memory: MemoryStatus
+    circuit_breaker: CircuitBreakerStatus
     active_tasks: int
 
 
@@ -115,12 +125,19 @@ async def readiness_check() -> ReadyResponse:
     # Count active tasks
     active_tasks = len(app_state.active_tasks)
 
+    # Check circuit breaker
+    circuit_breaker = get_circuit_breaker()
+    cb_state = circuit_breaker.state.value
+    cb_available = circuit_breaker.is_available()
+
     # Overall status
     overall_status = "healthy"
     if sdk_status != "healthy":
         overall_status = "degraded"
     if memory_status == "critical":
         overall_status = "unhealthy"
+    if cb_state == "open":
+        overall_status = "degraded"
 
     return ReadyResponse(
         status=overall_status,
@@ -139,5 +156,27 @@ async def readiness_check() -> ReadyResponse:
             rss_mb=round(rss_mb, 2),
             status=memory_status
         ),
+        circuit_breaker=CircuitBreakerStatus(
+            state=cb_state,
+            failure_count=circuit_breaker.failure_count,
+            is_available=cb_available
+        ),
         active_tasks=active_tasks
     )
+
+
+@router.get("/metrics")
+async def get_metrics_endpoint() -> dict:
+    """Get application metrics - no auth required.
+
+    Returns aggregated metrics including:
+    - Request counts (total, errors)
+    - Token usage (input, output)
+    - Latency histogram
+    - Per-endpoint statistics
+    - Status code distribution
+
+    Use for monitoring dashboards and alerting.
+    """
+    collector = get_metrics()
+    return collector.get_metrics()

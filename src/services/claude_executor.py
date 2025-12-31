@@ -84,7 +84,8 @@ from ..models.response import (
 )
 from ..core.config import get_settings
 from ..core.security import sanitize_path, sanitize_prompt
-from ..core.exceptions import handle_sdk_error
+from ..core.exceptions import handle_sdk_error, CircuitOpenError
+from .circuit_breaker import get_circuit_breaker
 
 # Lazy SDK imports for testing without SDK installed
 if TYPE_CHECKING:
@@ -220,6 +221,13 @@ class ClaudeExecutor:
         Returns AsyncIterator[Message] where Message is:
         UserMessage | AssistantMessage | SystemMessage | ResultMessage
         """
+        # Check circuit breaker
+        circuit_breaker = get_circuit_breaker()
+        if not await circuit_breaker.acquire():
+            raise CircuitOpenError(
+                f"Circuit breaker is open. Service will retry in {circuit_breaker.config.timeout_seconds}s"
+            )
+
         start_time = time.time()
         prompt = sanitize_prompt(request.prompt)
 
@@ -318,17 +326,23 @@ class ClaudeExecutor:
             retry_decorator = self._create_retry_decorator()
             retryable_execute = retry_decorator(_execute_with_retry)
             await retryable_execute()
+            # Record success with circuit breaker
+            await circuit_breaker.record_success()
         except RetryError as e:
-            # All retries exhausted
+            # All retries exhausted - record failure
+            await circuit_breaker.record_failure()
             is_error = True
             error_msg = f"All {self.settings.retry_max_attempts} retry attempts failed: {str(e.last_attempt.exception())}"
             raise handle_sdk_error(e.last_attempt.exception())
         except asyncio.TimeoutError:
+            # Timeout - record failure
+            await circuit_breaker.record_failure()
             is_error = True
             error_msg = f"Execution timeout after {request.timeout}s"
         except Exception as e:
             # Non-retryable error or other exception
             if not _is_retryable_error(e):
+                await circuit_breaker.record_failure()
                 is_error = True
                 error_msg = str(e)
                 raise handle_sdk_error(e)
@@ -355,6 +369,15 @@ class ClaudeExecutor:
 
     async def execute_streaming(self, request: QueryRequest) -> AsyncIterator[StreamEvent]:
         """Execute query with streaming response."""
+        # Check circuit breaker
+        circuit_breaker = get_circuit_breaker()
+        if not await circuit_breaker.acquire():
+            yield StreamEvent(
+                event="error",
+                data={"error": f"Circuit breaker is open. Retry in {circuit_breaker.config.timeout_seconds}s"}
+            )
+            return
+
         prompt = sanitize_prompt(request.prompt)
 
         # Get SDK components
@@ -378,10 +401,14 @@ class ClaudeExecutor:
                         TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock
                     ):
                         yield event
+            # Record success
+            await circuit_breaker.record_success()
 
         except asyncio.TimeoutError:
+            await circuit_breaker.record_failure()
             yield StreamEvent(event="error", data={"error": "Execution timeout"})
         except Exception as e:
+            await circuit_breaker.record_failure()
             yield StreamEvent(event="error", data={"error": str(e)})
 
     def _message_to_events(

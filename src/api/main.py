@@ -10,6 +10,7 @@ from ..core.config import get_settings
 from ..core.logging import configure_logging, get_logger
 from ..services.session_cache import SessionCache
 from ..middleware.logging import RequestLoggingMiddleware
+from ..middleware.rate_limit import RateLimitMiddleware
 
 # Import app_state from state module to avoid circular imports
 from .state import app_state, get_app_state, AppState
@@ -78,6 +79,8 @@ def create_app() -> FastAPI:
     )
 
     # Add middleware (order matters - first added = outermost)
+    # Order: Request -> Logging -> RateLimit -> Handler -> RateLimit -> Logging -> Response
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
 
     # Include routers

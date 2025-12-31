@@ -7,6 +7,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ..core.logging import get_logger, log_request, log_response, log_error
+from .metrics import get_metrics
 
 logger = get_logger(__name__)
 
@@ -56,6 +57,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 request_id=request_id,
             )
 
+            # Record metrics
+            metrics = get_metrics()
+            metrics.record_request(
+                endpoint=request.url.path,
+                status_code=response.status_code,
+                duration_ms=duration_ms,
+                is_error=response.status_code >= 400,
+            )
+
             return response
 
         except Exception as e:
@@ -70,6 +80,15 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 method=request.method,
                 path=request.url.path,
                 duration_ms=duration_ms,
+            )
+
+            # Record error metrics
+            metrics = get_metrics()
+            metrics.record_request(
+                endpoint=request.url.path,
+                status_code=500,
+                duration_ms=duration_ms,
+                is_error=True,
             )
 
             # Re-raise to let FastAPI handle the error

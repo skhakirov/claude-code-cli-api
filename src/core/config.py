@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     # Response limits
     max_response_size: int = 10 * 1024 * 1024  # 10 MB default
 
+    # Rate limiting
+    rate_limit_requests_per_second: float = 10.0
+    rate_limit_burst_size: int = 20
+
+    # Circuit breaker
+    circuit_breaker_failure_threshold: int = 5
+    circuit_breaker_success_threshold: int = 2
+    circuit_breaker_timeout: float = 30.0
+
     # Logging
     log_level: str = "INFO"
 
