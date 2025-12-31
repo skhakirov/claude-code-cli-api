@@ -18,6 +18,7 @@ from ...models.response import QueryResponse
 from ...services.claude_executor import ClaudeExecutor
 from ...services.session_cache import SessionCache, SessionMetadata
 from ..dependencies import get_executor, get_session_cache
+from ..state import app_state
 from ...middleware.auth import verify_api_key
 from ...core.logging import get_logger
 
@@ -106,8 +107,20 @@ async def execute_query(
     executor: ClaudeExecutor = Depends(get_executor),
     cache: SessionCache = Depends(get_session_cache)
 ) -> QueryResponse:
-    """Execute a query and return complete response."""
-    response = await executor.execute_query(request)
+    """Execute a query and return complete response.
+
+    The query execution is wrapped in a tracked task to ensure
+    proper cleanup during graceful shutdown.
+    """
+    # Create tracked task for graceful shutdown support
+    task = asyncio.create_task(executor.execute_query(request))
+    app_state.track_task(task)
+
+    try:
+        response = await task
+    except asyncio.CancelledError:
+        logger.warning("query_cancelled_during_shutdown")
+        raise
 
     # Save session metadata
     now = datetime.now(timezone.utc)
@@ -140,12 +153,24 @@ async def execute_streaming_query(
 
     Handles client disconnects gracefully and saves session metadata
     after stream completion. Uses StreamingState for thread-safe state access.
+    Respects shutdown_event for graceful termination during server shutdown.
     """
     state = StreamingState()
 
     async def generate():
         try:
             async for event in executor.execute_streaming(request):
+                # Check for shutdown signal
+                if app_state.shutdown_event.is_set():
+                    logger.warning("streaming_terminated_during_shutdown")
+                    event_id = await state.get_next_event_id()
+                    yield {
+                        "event": "error",
+                        "data": safe_json_dumps({"error": "Server shutting down"}),
+                        "id": str(event_id)
+                    }
+                    break
+
                 # Extract session info from result event
                 if event.event == "result" and isinstance(event.data, dict):
                     await state.update_from_result(event.data)
