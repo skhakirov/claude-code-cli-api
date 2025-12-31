@@ -28,7 +28,7 @@ def mock_settings():
         api_title="Claude Code CLI API",
         api_version="1.0.0",
         anthropic_api_key="sk-ant-test",
-        default_model="claude-sonnet-4-20250514",
+        default_model="claude-sonnet-4-5-20250929",
         default_max_turns=20,
         default_timeout=300,
         default_permission_mode="acceptEdits",
@@ -76,7 +76,7 @@ def mock_query_response():
     # Mock AssistantMessage
     assistant_msg = MagicMock()
     assistant_msg.content = [text_block]
-    assistant_msg.model = "claude-sonnet-4-20250514"
+    assistant_msg.model = "claude-sonnet-4-5-20250929"
     type(assistant_msg).__name__ = "AssistantMessage"
 
     # Mock ResultMessage
@@ -114,7 +114,7 @@ def mock_session_metadata():
         "created_at": datetime.now(timezone.utc),
         "last_activity": datetime.now(timezone.utc),
         "working_directory": "/workspace",
-        "model": "claude-sonnet-4-20250514",
+        "model": "claude-sonnet-4-5-20250929",
         "prompt_count": 1,
         "total_cost_usd": 0.003
     }

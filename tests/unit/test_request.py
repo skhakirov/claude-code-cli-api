@@ -31,7 +31,7 @@ class TestQueryRequest:
             disallowed_tools=["Bash"],
             system_prompt="You are helpful",
             max_turns=50,
-            model="claude-opus-4-20250514",
+            model="claude-opus-4-5-20251101",
             permission_mode="bypassPermissions",
             working_directory="/workspace/project",
             mcp_servers={"server1": {"command": "npx"}},
@@ -40,7 +40,7 @@ class TestQueryRequest:
         )
         assert req.resume == "session-123"
         assert req.allowed_tools == ["Read", "Write"]
-        assert req.model == "claude-opus-4-20250514"
+        assert req.model == "claude-opus-4-5-20251101"
 
     def test_query_request_prompt_required(self):
         """prompt is required."""

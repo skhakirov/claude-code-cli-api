@@ -119,7 +119,7 @@ cp .env.example .env
 CLAUDE_API_API_KEYS=["your-api-key-here"]
 
 # Default Claude model
-CLAUDE_API_DEFAULT_MODEL=claude-sonnet-4-20250514
+CLAUDE_API_DEFAULT_MODEL=claude-sonnet-4-5-20250929
 
 # Maximum agent iterations (1-100)
 CLAUDE_API_DEFAULT_MAX_TURNS=20
@@ -178,7 +178,7 @@ Executes a query to Claude and returns the complete response.
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `prompt` | string | **Yes** | - | Query text (1-100000 characters) |
-| `model` | string | No | from config | Claude model (`claude-sonnet-4-20250514`, `claude-opus-4-20250514`) |
+| `model` | string | No | from config | Claude model (`claude-sonnet-4-5-20250929`, `claude-opus-4-5-20251101`) |
 | `max_turns` | integer | No | 20 | Maximum agent iterations (1-100) |
 | `timeout` | integer | No | 300 | Timeout in seconds (1-600) |
 | `working_directory` | string | No | from config | Working directory for Claude |
@@ -217,7 +217,7 @@ Executes a query to Claude and returns the complete response.
     "input_tokens": 100,
     "output_tokens": 50
   },
-  "model": "claude-sonnet-4-20250514",
+  "model": "claude-sonnet-4-5-20250929",
   "tool_calls": [
     {
       "id": "toolu_xxx",
@@ -300,7 +300,7 @@ event: init
 data: {"type": "system", "session_id": "uuid", "tools": [...], "model": "..."}
 
 event: text
-data: {"text": "Partial response...", "model": "claude-sonnet-4-20250514"}
+data: {"text": "Partial response...", "model": "claude-sonnet-4-5-20250929"}
 
 event: tool_use
 data: {"id": "toolu_xxx", "name": "Read", "input": {...}}
@@ -354,7 +354,7 @@ Returns list of all cached sessions.
     "created_at": "2025-01-01T12:00:00Z",
     "last_activity": "2025-01-01T12:05:00Z",
     "working_directory": "/workspace",
-    "model": "claude-sonnet-4-20250514",
+    "model": "claude-sonnet-4-5-20250929",
     "prompt_count": 5,
     "total_cost_usd": 0.025
   }
@@ -375,7 +375,7 @@ Returns metadata for specific session.
   "created_at": "2025-01-01T12:00:00Z",
   "last_activity": "2025-01-01T12:05:00Z",
   "working_directory": "/workspace",
-  "model": "claude-sonnet-4-20250514",
+  "model": "claude-sonnet-4-5-20250929",
   "prompt_count": 5,
   "total_cost_usd": 0.025
 }
@@ -715,7 +715,7 @@ services:
     restart: unless-stopped
     environment:
       - CLAUDE_API_API_KEYS=${CLAUDE_API_API_KEYS}
-      - CLAUDE_API_DEFAULT_MODEL=${CLAUDE_API_DEFAULT_MODEL:-claude-sonnet-4-20250514}
+      - CLAUDE_API_DEFAULT_MODEL=${CLAUDE_API_DEFAULT_MODEL:-claude-sonnet-4-5-20250929}
       - CLAUDE_API_DEFAULT_PERMISSION_MODE=${CLAUDE_API_DEFAULT_PERMISSION_MODE:-acceptEdits}
       - CLAUDE_API_LOG_LEVEL=${CLAUDE_API_LOG_LEVEL:-INFO}
     volumes:
@@ -735,7 +735,7 @@ services:
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - CLAUDE_API_API_KEYS=${CLAUDE_API_API_KEYS}
-      - CLAUDE_API_DEFAULT_MODEL=${CLAUDE_API_DEFAULT_MODEL:-claude-sonnet-4-20250514}
+      - CLAUDE_API_DEFAULT_MODEL=${CLAUDE_API_DEFAULT_MODEL:-claude-sonnet-4-5-20250929}
       - CLAUDE_API_DEFAULT_PERMISSION_MODE=${CLAUDE_API_DEFAULT_PERMISSION_MODE:-acceptEdits}
       - CLAUDE_API_LOG_LEVEL=${CLAUDE_API_LOG_LEVEL:-INFO}
     volumes:
@@ -856,7 +856,7 @@ pytest tests/e2e/ -v
 |----------|----------|---------|-------------|
 | `CLAUDE_API_API_KEYS` | Yes | - | JSON array of API keys |
 | `ANTHROPIC_API_KEY` | No* | - | Anthropic API key (alternative to OAuth) |
-| `CLAUDE_API_DEFAULT_MODEL` | No | `claude-sonnet-4-20250514` | Default model |
+| `CLAUDE_API_DEFAULT_MODEL` | No | `claude-sonnet-4-5-20250929` | Default model |
 | `CLAUDE_API_DEFAULT_MAX_TURNS` | No | `20` | Max iterations (1-100) |
 | `CLAUDE_API_DEFAULT_TIMEOUT` | No | `300` | Timeout in seconds (1-600) |
 | `CLAUDE_API_DEFAULT_PERMISSION_MODE` | No | `acceptEdits` | Permission mode |

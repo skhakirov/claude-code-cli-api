@@ -218,7 +218,7 @@ class TestQueryRoutes:
                         "/api/v1/query",
                         json={
                             "prompt": "Hello",
-                            "model": "claude-opus-4-20250514",
+                            "model": "claude-opus-4-5-20251101",
                             "max_turns": 10,
                             "permission_mode": "bypassPermissions"
                         },

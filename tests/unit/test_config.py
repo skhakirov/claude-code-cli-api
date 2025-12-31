@@ -28,7 +28,7 @@ class TestSettings:
             api_keys=["test"],
             anthropic_api_key="sk-ant-test"
         )
-        assert settings.default_model == "claude-sonnet-4-20250514"
+        assert settings.default_model == "claude-sonnet-4-5-20250929"
 
     def test_settings_permission_mode_validation(self):
         """PermissionMode should only accept valid values."""

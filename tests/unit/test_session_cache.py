@@ -198,11 +198,11 @@ class TestSessionMetadata:
             created_at=now,
             last_activity=now,
             working_directory="/workspace",
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             prompt_count=5,
             total_cost_usd=0.025
         )
-        assert metadata.model == "claude-sonnet-4-20250514"
+        assert metadata.model == "claude-sonnet-4-5-20250929"
         assert metadata.prompt_count == 5
         assert metadata.total_cost_usd == 0.025
 
@@ -355,7 +355,7 @@ class TestSessionPersistence:
             "created_at": now.isoformat(),
             "last_activity": now.isoformat(),
             "working_directory": "/workspace",
-            "model": "claude-sonnet-4",
+            "model": "claude-sonnet-4-5",
             "prompt_count": 5,
             "total_cost_usd": 0.025
         }]

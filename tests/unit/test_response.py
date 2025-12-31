@@ -41,7 +41,7 @@ class TestQueryResponse:
             is_error=False,
             num_turns=2,
             total_cost_usd=0.005,
-            model="claude-sonnet-4-20250514",
+            model="claude-sonnet-4-5-20250929",
             usage=UsageInfo(input_tokens=100, output_tokens=50),
             tool_calls=[
                 ToolCallInfo(id="tool-1", name="Read", input={"path": "/file.txt"})
@@ -106,7 +106,7 @@ class TestStreamEvent:
 
         event = StreamEvent(
             event="text",
-            data={"text": "Hello", "model": "claude-sonnet-4-20250514"}
+            data={"text": "Hello", "model": "claude-sonnet-4-5-20250929"}
         )
         assert event.event == "text"
         assert event.data["text"] == "Hello"

@@ -214,7 +214,7 @@ def _create_mock_sdk(result_text: str = "Test response") -> dict:
 
     mock_assistant_msg = MagicMock()
     mock_assistant_msg.content = [mock_text_block]
-    mock_assistant_msg.model = "claude-sonnet-4-20250514"
+    mock_assistant_msg.model = "claude-sonnet-4-5-20250929"
 
     mock_result_msg = MagicMock()
     mock_result_msg.session_id = "test-session-123"

@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Claude
     anthropic_api_key: str = ""
-    default_model: str = "claude-sonnet-4-20250514"
+    default_model: str = "claude-sonnet-4-5-20250929"
     default_max_turns: int = 20
     default_timeout: int = 300
     default_permission_mode: PermissionMode = "acceptEdits"

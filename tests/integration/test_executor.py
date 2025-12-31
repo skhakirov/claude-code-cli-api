@@ -148,7 +148,7 @@ class TestClaudeExecutor:
 
                 request = QueryRequest(
                     prompt="Hello",
-                    model="claude-opus-4-20250514"
+                    model="claude-opus-4-5-20251101"
                 )
                 response = await executor.execute_query(request)
 
@@ -601,7 +601,7 @@ class TestStreamingResponseSizeLimit:
         mock_settings.max_response_size = 100  # 100 bytes
 
         assistant_msg = MagicMock()
-        assistant_msg.model = "claude-sonnet-4"
+        assistant_msg.model = "claude-sonnet-4-5"
         # Create text block that exceeds limit
         text_block = MagicMock()
         text_block.text = "A" * 150  # 150 bytes > 100 byte limit
@@ -656,7 +656,7 @@ class TestStreamingResponseSizeLimit:
         mock_settings.max_response_size = 50  # 50 bytes
 
         assistant_msg = MagicMock()
-        assistant_msg.model = "claude-sonnet-4"
+        assistant_msg.model = "claude-sonnet-4-5"
         # Text that will be partially truncated
         text_block = MagicMock()
         text_block.text = "A" * 100  # 100 bytes > 50 byte limit
@@ -708,7 +708,7 @@ class TestStreamingResponseSizeLimit:
 
         # First message - triggers truncation
         assistant_msg1 = MagicMock()
-        assistant_msg1.model = "claude-sonnet-4"
+        assistant_msg1.model = "claude-sonnet-4-5"
         text_block1 = MagicMock()
         text_block1.text = "A" * 100  # Triggers truncation
         text_block1.__class__ = mock_sdk['TextBlock']
@@ -717,7 +717,7 @@ class TestStreamingResponseSizeLimit:
 
         # Second message - should be skipped
         assistant_msg2 = MagicMock()
-        assistant_msg2.model = "claude-sonnet-4"
+        assistant_msg2.model = "claude-sonnet-4-5"
         text_block2 = MagicMock()
         text_block2.text = "B" * 50  # Should be skipped
         text_block2.__class__ = mock_sdk['TextBlock']
@@ -774,7 +774,7 @@ class TestStreamingResponseSizeLimit:
         mock_settings.max_response_size = 1000
 
         assistant_msg = MagicMock()
-        assistant_msg.model = "claude-sonnet-4"
+        assistant_msg.model = "claude-sonnet-4-5"
         text_block = MagicMock()
         text_block.text = "Hello, world!"  # Small response
         text_block.__class__ = mock_sdk['TextBlock']
