@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     retry_max_wait: float = 10.0  # seconds
     retry_multiplier: float = 2.0  # exponential backoff multiplier
 
+    # Response limits
+    max_response_size: int = 10 * 1024 * 1024  # 10 MB default
+
     # Logging
     log_level: str = "INFO"
 

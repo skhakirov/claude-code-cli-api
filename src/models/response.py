@@ -95,6 +95,9 @@ class QueryResponse(BaseModel):
     thinking: List[ThinkingInfo] = []
     error: Optional[str] = None
 
+    # Response limits
+    response_truncated: bool = False
+
 
 class StreamEvent(BaseModel):
     """SSE event for streaming responses."""

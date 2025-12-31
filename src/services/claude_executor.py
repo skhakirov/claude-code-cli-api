@@ -244,17 +244,20 @@ class ClaudeExecutor:
         is_error = False
         error_msg: Optional[str] = None
         retry_count = 0
+        response_truncated = False
+        max_response_size = self.settings.max_response_size
 
         # Inner function with retry logic
         async def _execute_with_retry():
             nonlocal session_id, result_text, tool_calls, thinking_blocks
             nonlocal model_used, usage, cost, num_turns, duration_api_ms
-            nonlocal is_error, error_msg, retry_count
+            nonlocal is_error, error_msg, retry_count, response_truncated
 
             # Reset collectors for retry
             result_text = ""
             tool_calls = []
             thinking_blocks = []
+            response_truncated = False
 
             async with async_timeout(request.timeout or self.settings.default_timeout):
                 # Source: https://platform.claude.com/docs/en/agent-sdk/python#query
@@ -270,7 +273,14 @@ class ClaudeExecutor:
                         for block in msg.content:
                             # TextBlock: text: str
                             if isinstance(block, TextBlock):
-                                result_text += block.text
+                                # Check response size limit
+                                if len(result_text) + len(block.text) > max_response_size:
+                                    remaining = max_response_size - len(result_text)
+                                    if remaining > 0:
+                                        result_text += block.text[:remaining]
+                                    response_truncated = True
+                                else:
+                                    result_text += block.text
                             # ThinkingBlock: thinking: str, signature: str
                             elif isinstance(block, ThinkingBlock):
                                 thinking_blocks.append(ThinkingInfo(
@@ -339,7 +349,8 @@ class ClaudeExecutor:
             usage=usage,
             tool_calls=tool_calls,
             thinking=thinking_blocks,
-            error=error_msg
+            error=error_msg,
+            response_truncated=response_truncated
         )
 
     async def execute_streaming(self, request: QueryRequest) -> AsyncIterator[StreamEvent]:
