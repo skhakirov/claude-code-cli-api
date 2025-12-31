@@ -4,7 +4,7 @@ import threading
 import time
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Optional, Dict
+from typing import Optional, Dict, Callable, Awaitable
 
 from ..core.logging import get_logger
 from ..core.config import get_settings
@@ -50,6 +50,12 @@ class CircuitBreaker:
     Thread-safe implementation using asyncio.Lock.
     """
 
+    # Type alias for state change callback
+    StateChangeCallback = Callable[
+        [str, int, Dict[str, int]],  # state, failure_count, error_types
+        Awaitable[None]
+    ]
+
     def __init__(self, config: Optional[CircuitBreakerConfig] = None):
         self.config = config or CircuitBreakerConfig()
         self._state = CircuitState.CLOSED
@@ -60,6 +66,38 @@ class CircuitBreaker:
         self._half_open_calls = 0
         self._error_types: Dict[str, int] = {}  # Track error types for analysis
         self._lock = asyncio.Lock()
+        self._state_change_callback: Optional[CircuitBreaker.StateChangeCallback] = None
+
+    def set_state_change_callback(
+        self,
+        callback: Optional["CircuitBreaker.StateChangeCallback"]
+    ) -> None:
+        """Set callback for state changes (used for alerting).
+
+        Args:
+            callback: Async function called with (state, failure_count, error_types)
+                     when circuit breaker changes state.
+        """
+        self._state_change_callback = callback
+
+    async def _notify_state_change(self, new_state: str) -> None:
+        """Notify callback of state change (fire and forget, errors logged)."""
+        if self._state_change_callback is None:
+            return
+
+        try:
+            await self._state_change_callback(
+                new_state,
+                self._failure_count,
+                dict(self._error_types)
+            )
+        except Exception as e:
+            logger.warning(
+                "circuit_breaker_callback_error",
+                state=new_state,
+                error=str(e),
+                error_type=type(e).__name__
+            )
 
     @property
     def state(self) -> CircuitState:
@@ -122,11 +160,13 @@ class CircuitBreaker:
         Returns:
             True if request is allowed, False if circuit is open
         """
+        state_changed_to: Optional[str] = None
+        result = False
+
         async with self._lock:
             if self._state == CircuitState.CLOSED:
-                return True
-
-            if self._state == CircuitState.OPEN:
+                result = True
+            elif self._state == CircuitState.OPEN:
                 # Check if we should transition to half-open
                 if self._last_failure_time is not None:
                     elapsed = time.time() - self._last_failure_time
@@ -134,24 +174,28 @@ class CircuitBreaker:
                         self._state = CircuitState.HALF_OPEN
                         self._half_open_calls = 0
                         self._success_count = 0
+                        state_changed_to = CircuitState.HALF_OPEN.value
                         logger.info(
                             "circuit_breaker_half_open",
                             elapsed_seconds=elapsed
                         )
                         self._half_open_calls += 1
-                        return True
-                return False
-
-            if self._state == CircuitState.HALF_OPEN:
+                        result = True
+            elif self._state == CircuitState.HALF_OPEN:
                 if self._half_open_calls < self.config.half_open_max_calls:
                     self._half_open_calls += 1
-                    return True
-                return False
+                    result = True
 
-            return False
+        # Notify callback outside of lock
+        if state_changed_to:
+            await self._notify_state_change(state_changed_to)
+
+        return result
 
     async def record_success(self) -> None:
         """Record a successful call."""
+        state_changed_to: Optional[str] = None
+
         async with self._lock:
             if self._state == CircuitState.HALF_OPEN:
                 self._success_count += 1
@@ -162,12 +206,17 @@ class CircuitBreaker:
                     self._success_count = 0
                     self._half_open_calls = 0
                     self._error_types = {}
+                    state_changed_to = CircuitState.CLOSED.value
                     logger.info("circuit_breaker_closed", reason="success_threshold")
             elif self._state == CircuitState.CLOSED:
                 # Reset failure count on success
                 self._failure_count = 0
                 self._weighted_failure_count = 0.0
                 self._error_types = {}
+
+        # Notify callback outside of lock
+        if state_changed_to:
+            await self._notify_state_change(state_changed_to)
 
     async def record_failure(self, error_type: str = "unknown") -> None:
         """Record a failed call with error type weighting.
@@ -176,6 +225,8 @@ class CircuitBreaker:
             error_type: Type of error for weighted counting.
                        Values: "timeout", "connection", "process", "unknown"
         """
+        state_changed_to: Optional[str] = None
+
         async with self._lock:
             # Get weight for error type
             weight = ERROR_WEIGHTS.get(error_type, ERROR_WEIGHTS["unknown"])
@@ -191,6 +242,7 @@ class CircuitBreaker:
                 # Any failure in half-open returns to open
                 self._state = CircuitState.OPEN
                 self._success_count = 0
+                state_changed_to = CircuitState.OPEN.value
                 logger.warning(
                     "circuit_breaker_reopened",
                     failure_count=self._failure_count,
@@ -201,6 +253,7 @@ class CircuitBreaker:
                 # Use weighted count for threshold comparison
                 if self._weighted_failure_count >= self.config.failure_threshold:
                     self._state = CircuitState.OPEN
+                    state_changed_to = CircuitState.OPEN.value
                     logger.warning(
                         "circuit_breaker_opened",
                         failure_count=self._failure_count,
@@ -208,6 +261,10 @@ class CircuitBreaker:
                         threshold=self.config.failure_threshold,
                         error_types=self._error_types
                     )
+
+        # Notify callback outside of lock to avoid blocking
+        if state_changed_to:
+            await self._notify_state_change(state_changed_to)
 
     async def reset(self) -> None:
         """Reset circuit breaker to closed state (for testing)."""
@@ -242,10 +299,39 @@ _circuit_breaker: Optional[CircuitBreaker] = None
 _circuit_breaker_lock = threading.Lock()
 
 
+async def _alerting_callback(
+    state: str,
+    failure_count: int,
+    error_types: Dict[str, int]
+) -> None:
+    """Callback for circuit breaker state changes to send alerts."""
+    from .alerting import get_alerting_service
+
+    alerting = get_alerting_service()
+    if not alerting.is_enabled:
+        return
+
+    # Only alert on OPEN state (critical) or recovery to CLOSED (info)
+    if state == CircuitState.OPEN.value:
+        await alerting.alert_circuit_breaker(
+            state=state,
+            failure_count=failure_count,
+            error_types=error_types
+        )
+    elif state == CircuitState.CLOSED.value:
+        await alerting.send_alert(
+            alert_type="circuit_breaker_recovered",
+            title="Circuit Breaker Recovered",
+            message="Circuit breaker has closed after successful recovery",
+            severity="info"
+        )
+
+
 def get_circuit_breaker() -> CircuitBreaker:
     """Get or create the global circuit breaker (thread-safe).
 
     Uses configuration from settings for threshold and timeout values.
+    Configures alerting callback for state changes.
     """
     global _circuit_breaker
     if _circuit_breaker is None:
@@ -259,11 +345,13 @@ def get_circuit_breaker() -> CircuitBreaker:
                     timeout_seconds=settings.circuit_breaker_timeout,
                 )
                 _circuit_breaker = CircuitBreaker(config=config)
+                _circuit_breaker.set_state_change_callback(_alerting_callback)
                 logger.info(
                     "circuit_breaker_initialized",
                     failure_threshold=config.failure_threshold,
                     success_threshold=config.success_threshold,
                     timeout_seconds=config.timeout_seconds,
+                    alerting_enabled=bool(settings.alert_webhook_url),
                 )
     return _circuit_breaker
 
