@@ -3,8 +3,8 @@ import asyncio
 import threading
 import time
 from enum import Enum
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Optional, Dict
 
 from ..core.logging import get_logger
 
@@ -18,10 +18,20 @@ class CircuitState(str, Enum):
     HALF_OPEN = "half_open"  # Testing recovery
 
 
+# Error type weights for weighted failure recording
+# Timeouts are less critical, process errors are more critical
+ERROR_WEIGHTS: Dict[str, float] = {
+    "timeout": 0.5,      # Timeouts may be transient
+    "connection": 1.0,   # Connection errors are standard
+    "process": 1.5,      # Process errors indicate real problems
+    "unknown": 1.0,      # Default weight
+}
+
+
 @dataclass
 class CircuitBreakerConfig:
     """Configuration for circuit breaker."""
-    failure_threshold: int = 5      # Failures to open circuit
+    failure_threshold: int = 5      # Weighted failures to open circuit
     success_threshold: int = 2      # Successes to close circuit
     timeout_seconds: float = 30.0   # Time before half-open
     half_open_max_calls: int = 3    # Max calls in half-open state
@@ -43,9 +53,11 @@ class CircuitBreaker:
         self.config = config or CircuitBreakerConfig()
         self._state = CircuitState.CLOSED
         self._failure_count = 0
+        self._weighted_failure_count: float = 0.0  # Weighted failure tracking
         self._success_count = 0
         self._last_failure_time: Optional[float] = None
         self._half_open_calls = 0
+        self._error_types: Dict[str, int] = {}  # Track error types for analysis
         self._lock = asyncio.Lock()
 
     @property
@@ -145,18 +157,34 @@ class CircuitBreaker:
                 if self._success_count >= self.config.success_threshold:
                     self._state = CircuitState.CLOSED
                     self._failure_count = 0
+                    self._weighted_failure_count = 0.0
                     self._success_count = 0
                     self._half_open_calls = 0
+                    self._error_types = {}
                     logger.info("circuit_breaker_closed", reason="success_threshold")
             elif self._state == CircuitState.CLOSED:
                 # Reset failure count on success
                 self._failure_count = 0
+                self._weighted_failure_count = 0.0
+                self._error_types = {}
 
-    async def record_failure(self) -> None:
-        """Record a failed call."""
+    async def record_failure(self, error_type: str = "unknown") -> None:
+        """Record a failed call with error type weighting.
+
+        Args:
+            error_type: Type of error for weighted counting.
+                       Values: "timeout", "connection", "process", "unknown"
+        """
         async with self._lock:
+            # Get weight for error type
+            weight = ERROR_WEIGHTS.get(error_type, ERROR_WEIGHTS["unknown"])
+
             self._failure_count += 1
+            self._weighted_failure_count += weight
             self._last_failure_time = time.time()
+
+            # Track error types for analysis
+            self._error_types[error_type] = self._error_types.get(error_type, 0) + 1
 
             if self._state == CircuitState.HALF_OPEN:
                 # Any failure in half-open returns to open
@@ -164,15 +192,20 @@ class CircuitBreaker:
                 self._success_count = 0
                 logger.warning(
                     "circuit_breaker_reopened",
-                    failure_count=self._failure_count
+                    failure_count=self._failure_count,
+                    weighted_count=self._weighted_failure_count,
+                    error_type=error_type
                 )
             elif self._state == CircuitState.CLOSED:
-                if self._failure_count >= self.config.failure_threshold:
+                # Use weighted count for threshold comparison
+                if self._weighted_failure_count >= self.config.failure_threshold:
                     self._state = CircuitState.OPEN
                     logger.warning(
                         "circuit_breaker_opened",
                         failure_count=self._failure_count,
-                        threshold=self.config.failure_threshold
+                        weighted_count=self._weighted_failure_count,
+                        threshold=self.config.failure_threshold,
+                        error_types=self._error_types
                     )
 
     async def reset(self) -> None:
@@ -180,17 +213,21 @@ class CircuitBreaker:
         async with self._lock:
             self._state = CircuitState.CLOSED
             self._failure_count = 0
+            self._weighted_failure_count = 0.0
             self._success_count = 0
             self._half_open_calls = 0
             self._last_failure_time = None
+            self._error_types = {}
 
     def get_status(self) -> dict:
         """Get circuit breaker status for health checks."""
         return {
             "state": self._state.value,
             "failure_count": self._failure_count,
+            "weighted_failure_count": self._weighted_failure_count,
             "success_count": self._success_count,
             "last_failure_time": self._last_failure_time,
+            "error_types": dict(self._error_types),  # Copy for safety
             "config": {
                 "failure_threshold": self.config.failure_threshold,
                 "success_threshold": self.config.success_threshold,

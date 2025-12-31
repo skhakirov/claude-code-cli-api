@@ -1,4 +1,5 @@
 """Health check endpoints."""
+import shutil
 import sys
 from typing import Optional
 from fastapi import APIRouter
@@ -38,6 +39,14 @@ class MemoryStatus(BaseModel):
     status: str
 
 
+class DiskStatus(BaseModel):
+    """Disk space status info."""
+    free_gb: float
+    total_gb: float
+    used_percent: float
+    status: str
+
+
 class CircuitBreakerStatus(BaseModel):
     """Circuit breaker status info."""
     state: str
@@ -52,6 +61,7 @@ class ReadyResponse(BaseModel):
     cache: CacheStatus
     sdk: SDKStatus
     memory: MemoryStatus
+    disk: DiskStatus
     circuit_breaker: CircuitBreakerStatus
     active_tasks: int
 
@@ -122,6 +132,23 @@ async def readiness_check() -> ReadyResponse:
     elif rss_mb > 2048:  # > 2GB
         memory_status = "critical"
 
+    # Check disk space
+    try:
+        disk_usage = shutil.disk_usage("/")
+        disk_free_gb = disk_usage.free / (1024 ** 3)
+        disk_total_gb = disk_usage.total / (1024 ** 3)
+        disk_used_percent = ((disk_usage.total - disk_usage.free) / disk_usage.total) * 100
+    except Exception:
+        disk_free_gb = 0.0
+        disk_total_gb = 0.0
+        disk_used_percent = 0.0
+
+    disk_status = "healthy"
+    if disk_used_percent > 90:  # > 90% used
+        disk_status = "critical"
+    elif disk_used_percent > 80:  # > 80% used
+        disk_status = "warning"
+
     # Count active tasks
     active_tasks = len(app_state.active_tasks)
 
@@ -135,6 +162,8 @@ async def readiness_check() -> ReadyResponse:
     if sdk_status != "healthy":
         overall_status = "degraded"
     if memory_status == "critical":
+        overall_status = "unhealthy"
+    if disk_status == "critical":
         overall_status = "unhealthy"
     if cb_state == "open":
         overall_status = "degraded"
@@ -155,6 +184,12 @@ async def readiness_check() -> ReadyResponse:
         memory=MemoryStatus(
             rss_mb=round(rss_mb, 2),
             status=memory_status
+        ),
+        disk=DiskStatus(
+            free_gb=round(disk_free_gb, 2),
+            total_gb=round(disk_total_gb, 2),
+            used_percent=round(disk_used_percent, 1),
+            status=disk_status
         ),
         circuit_breaker=CircuitBreakerStatus(
             state=cb_state,

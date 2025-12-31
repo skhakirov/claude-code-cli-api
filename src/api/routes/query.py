@@ -30,11 +30,13 @@ class StreamingState:
     """Thread-safe state container for SSE streaming.
 
     Uses asyncio.Lock for safe concurrent access to streaming state.
+    Includes event counter for SSE reconnection support.
     """
     session_id: Optional[str] = None
     total_cost: float = 0.0
     model_used: Optional[str] = None
     client_disconnected: bool = False
+    event_counter: int = 0  # For SSE event ID tracking
     _lock: Optional[asyncio.Lock] = field(default=None, repr=False)
     _init_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
 
@@ -72,6 +74,16 @@ class StreamingState:
                 self.model_used,
                 self.client_disconnected
             )
+
+    async def get_next_event_id(self) -> int:
+        """Get next event ID for SSE reconnection support.
+
+        Returns incrementing event IDs that clients can use with
+        Last-Event-ID header for reconnection.
+        """
+        async with self._get_lock():
+            self.event_counter += 1
+            return self.event_counter
 
 
 def safe_json_dumps(data: Any) -> str:
@@ -142,7 +154,14 @@ async def execute_streaming_query(
                 if event.event == "text" and isinstance(event.data, dict):
                     await state.update_model(event.data.get("model"))
 
-                yield {"event": event.event, "data": safe_json_dumps(event.data)}
+                # Get event ID for SSE reconnection support
+                event_id = await state.get_next_event_id()
+
+                yield {
+                    "event": event.event,
+                    "data": safe_json_dumps(event.data),
+                    "id": str(event_id)
+                }
 
         except asyncio.CancelledError:
             # Client disconnected - mark for cleanup
@@ -151,8 +170,13 @@ async def execute_streaming_query(
             raise
 
         except Exception as e:
-            # Send error event before re-raising
-            yield {"event": "error", "data": safe_json_dumps({"error": str(e)})}
+            # Send error event before re-raising (with event ID for consistency)
+            event_id = await state.get_next_event_id()
+            yield {
+                "event": "error",
+                "data": safe_json_dumps({"error": str(e)}),
+                "id": str(event_id)
+            }
             raise
 
         finally:

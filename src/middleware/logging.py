@@ -3,6 +3,7 @@ import time
 import uuid
 from typing import Callable
 
+import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
@@ -18,12 +19,21 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable
     ) -> Response:
-        """Process request with logging."""
+        """Process request with logging and correlation ID propagation."""
         # Generate request ID
         request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())[:8]
 
         # Store request ID in state for other handlers
         request.state.request_id = request_id
+
+        # Clear and bind context for correlation ID propagation
+        # All logs in this request context will automatically include request_id
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(
+            request_id=request_id,
+            path=request.url.path,
+            method=request.method
+        )
 
         # Log incoming request
         log_request(

@@ -88,6 +88,38 @@ def _is_retryable_error(exception: BaseException) -> bool:
 
     return False
 
+
+def _classify_error_type(exception: BaseException) -> str:
+    """Classify exception into error type for circuit breaker weighting.
+
+    Returns:
+        Error type: "timeout", "connection", "process", or "unknown"
+    """
+    # Timeout errors
+    if isinstance(exception, (TimeoutError, asyncio.TimeoutError)):
+        return "timeout"
+
+    # Connection errors
+    try:
+        from claude_agent_sdk import CLIConnectionError
+        if isinstance(exception, CLIConnectionError):
+            return "connection"
+    except ImportError:
+        pass
+
+    if isinstance(exception, (ConnectionError, OSError)):
+        return "connection"
+
+    # Process errors (SDK-specific)
+    try:
+        from claude_agent_sdk import ProcessError
+        if isinstance(exception, ProcessError):
+            return "process"
+    except ImportError:
+        pass
+
+    return "unknown"
+
 from ..models.request import QueryRequest
 from ..models.response import (
     QueryResponse, QueryStatus, ToolCallInfo, UsageInfo,
@@ -396,13 +428,16 @@ class ClaudeExecutor:
             await circuit_breaker.record_success()
         except RetryError as e:
             # All retries exhausted - record failure
-            await circuit_breaker.record_failure()
+            # Determine error type from the last exception
+            last_exc = e.last_attempt.exception()
+            error_type = _classify_error_type(last_exc)
+            await circuit_breaker.record_failure(error_type=error_type)
             is_error = True
-            error_msg = f"All {self.settings.retry_max_attempts} retry attempts failed: {str(e.last_attempt.exception())}"
-            raise handle_sdk_error(e.last_attempt.exception())
+            error_msg = f"All {self.settings.retry_max_attempts} retry attempts failed: {str(last_exc)}"
+            raise handle_sdk_error(last_exc)
         except asyncio.TimeoutError:
             # Timeout - record failure and raise proper HTTP error
-            await circuit_breaker.record_failure()
+            await circuit_breaker.record_failure(error_type="timeout")
             timeout_seconds = request.timeout or self.settings.default_timeout
             raise handle_sdk_error(
                 ExecutionTimeoutError(
@@ -413,7 +448,8 @@ class ClaudeExecutor:
         except Exception as e:
             # Non-retryable error or other exception
             if not _is_retryable_error(e):
-                await circuit_breaker.record_failure()
+                error_type = _classify_error_type(e)
+                await circuit_breaker.record_failure(error_type=error_type)
                 is_error = True
                 error_msg = str(e)
                 raise handle_sdk_error(e)
@@ -492,7 +528,7 @@ class ClaudeExecutor:
             await circuit_breaker.record_success()
 
         except asyncio.TimeoutError:
-            await circuit_breaker.record_failure()
+            await circuit_breaker.record_failure(error_type="timeout")
             timeout_seconds = request.timeout or self.settings.default_timeout
             yield StreamEvent(
                 event="error",
@@ -502,7 +538,8 @@ class ClaudeExecutor:
                 }
             )
         except Exception as e:
-            await circuit_breaker.record_failure()
+            error_type = _classify_error_type(e)
+            await circuit_breaker.record_failure(error_type=error_type)
             yield StreamEvent(event="error", data={"error": str(e)})
         finally:
             # Ensure generator cleanup to prevent resource leaks

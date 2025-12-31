@@ -204,3 +204,80 @@ class TestSessionMetadata:
         assert metadata.model == "claude-sonnet-4-20250514"
         assert metadata.prompt_count == 5
         assert metadata.total_cost_usd == 0.025
+
+
+class TestStreamingState:
+    """Tests for P1: SSE StreamingState with event IDs."""
+
+    @pytest.mark.asyncio
+    async def test_streaming_state_event_counter_increments(self):
+        """Event counter should increment on each call."""
+        from src.api.routes.query import StreamingState
+
+        state = StreamingState()
+
+        id1 = await state.get_next_event_id()
+        id2 = await state.get_next_event_id()
+        id3 = await state.get_next_event_id()
+
+        assert id1 == 1
+        assert id2 == 2
+        assert id3 == 3
+
+    @pytest.mark.asyncio
+    async def test_streaming_state_event_counter_starts_at_zero(self):
+        """Event counter should start at zero."""
+        from src.api.routes.query import StreamingState
+
+        state = StreamingState()
+        assert state.event_counter == 0
+
+    @pytest.mark.asyncio
+    async def test_streaming_state_concurrent_event_ids(self):
+        """Event IDs should be unique under concurrent access."""
+        import asyncio
+        from src.api.routes.query import StreamingState
+
+        state = StreamingState()
+        results = []
+
+        async def get_id():
+            event_id = await state.get_next_event_id()
+            results.append(event_id)
+
+        # Run 100 concurrent event ID requests
+        await asyncio.gather(*[get_id() for _ in range(100)])
+
+        # All IDs should be unique
+        assert len(results) == 100
+        assert len(set(results)) == 100  # All unique
+        assert sorted(results) == list(range(1, 101))
+
+    @pytest.mark.asyncio
+    async def test_streaming_state_update_from_result(self):
+        """State should update from result event data."""
+        from src.api.routes.query import StreamingState
+
+        state = StreamingState()
+
+        await state.update_from_result({
+            "session_id": "test-session",
+            "total_cost_usd": 0.005
+        })
+
+        session_id, total_cost, _, _ = await state.get_snapshot()
+        assert session_id == "test-session"
+        assert total_cost == 0.005
+
+    @pytest.mark.asyncio
+    async def test_streaming_state_mark_disconnected(self):
+        """State should track client disconnect."""
+        from src.api.routes.query import StreamingState
+
+        state = StreamingState()
+        assert state.client_disconnected is False
+
+        await state.mark_disconnected()
+
+        _, _, _, disconnected = await state.get_snapshot()
+        assert disconnected is True

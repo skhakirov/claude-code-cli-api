@@ -437,3 +437,93 @@ class TestP0Robustness:
 
                 # Should complete and have result event
                 assert any(e.event == "result" for e in events)
+
+
+class TestP1Reliability:
+    """Tests for P1 reliability improvements."""
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_weighted_failures(self):
+        """Circuit breaker should use weighted failure counting."""
+        from src.services.circuit_breaker import (
+            CircuitBreaker,
+            CircuitBreakerConfig,
+            CircuitState,
+            ERROR_WEIGHTS
+        )
+
+        # Config with threshold of 5
+        config = CircuitBreakerConfig(failure_threshold=5)
+        cb = CircuitBreaker(config)
+
+        # Verify ERROR_WEIGHTS are defined
+        assert ERROR_WEIGHTS["timeout"] == 0.5
+        assert ERROR_WEIGHTS["connection"] == 1.0
+        assert ERROR_WEIGHTS["process"] == 1.5
+        assert ERROR_WEIGHTS["unknown"] == 1.0
+
+        # 10 timeout errors = 5.0 weighted (should trigger)
+        for _ in range(9):
+            await cb.record_failure("timeout")
+            # Should still be closed (9 * 0.5 = 4.5 < 5)
+            assert cb.state == CircuitState.CLOSED
+
+        await cb.record_failure("timeout")
+        # Now should be open (10 * 0.5 = 5.0 >= 5)
+        assert cb.state == CircuitState.OPEN
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_process_errors_heavier(self):
+        """Process errors should have higher weight."""
+        from src.services.circuit_breaker import (
+            CircuitBreaker,
+            CircuitBreakerConfig,
+            CircuitState
+        )
+
+        config = CircuitBreakerConfig(failure_threshold=5)
+        cb = CircuitBreaker(config)
+
+        # 4 process errors = 6.0 weighted (should trigger)
+        for _ in range(3):
+            await cb.record_failure("process")
+            # 3 * 1.5 = 4.5 < 5
+            assert cb.state == CircuitState.CLOSED
+
+        await cb.record_failure("process")
+        # 4 * 1.5 = 6.0 >= 5
+        assert cb.state == CircuitState.OPEN
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_error_type_tracking(self):
+        """Circuit breaker should track error types."""
+        from src.services.circuit_breaker import CircuitBreaker
+
+        cb = CircuitBreaker()
+
+        await cb.record_failure("timeout")
+        await cb.record_failure("timeout")
+        await cb.record_failure("connection")
+        await cb.record_failure("process")
+
+        status = cb.get_status()
+        assert status["error_types"]["timeout"] == 2
+        assert status["error_types"]["connection"] == 1
+        assert status["error_types"]["process"] == 1
+        assert "weighted_failure_count" in status
+
+    @pytest.mark.asyncio
+    async def test_circuit_breaker_reset_clears_error_types(self):
+        """Reset should clear error types tracking."""
+        from src.services.circuit_breaker import CircuitBreaker
+
+        cb = CircuitBreaker()
+
+        await cb.record_failure("timeout")
+        await cb.record_failure("connection")
+
+        await cb.reset()
+
+        status = cb.get_status()
+        assert status["error_types"] == {}
+        assert status["weighted_failure_count"] == 0.0

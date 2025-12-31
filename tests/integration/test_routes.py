@@ -214,6 +214,47 @@ class TestHealthRoutes:
         assert "version" in data or "status" in data
 
 
+class TestHealthReadyEndpoint:
+    """Tests for /health/ready endpoint with P1 improvements."""
+
+    def test_health_ready_returns_disk_status(self, client):
+        """Readiness check includes disk space status."""
+        response = client.get("/api/v1/health/ready")
+        assert response.status_code == 200
+        data = response.json()
+
+        # P1: Disk space should be included
+        assert "disk" in data
+        disk = data["disk"]
+        assert "free_gb" in disk
+        assert "total_gb" in disk
+        assert "used_percent" in disk
+        assert "status" in disk
+        assert disk["status"] in ["healthy", "warning", "critical"]
+
+    def test_health_ready_disk_status_fields(self, client):
+        """Disk status has correct field types."""
+        response = client.get("/api/v1/health/ready")
+        data = response.json()
+        disk = data["disk"]
+
+        assert isinstance(disk["free_gb"], (int, float))
+        assert isinstance(disk["total_gb"], (int, float))
+        assert isinstance(disk["used_percent"], (int, float))
+        assert disk["total_gb"] >= disk["free_gb"]
+
+    def test_health_ready_includes_circuit_breaker(self, client):
+        """Readiness check includes circuit breaker status."""
+        response = client.get("/api/v1/health/ready")
+        data = response.json()
+
+        assert "circuit_breaker" in data
+        cb = data["circuit_breaker"]
+        assert "state" in cb
+        assert "failure_count" in cb
+        assert "is_available" in cb
+
+
 class TestSessionRoutes:
     """Tests for /sessions endpoints."""
 
