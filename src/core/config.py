@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     session_cache_maxsize: int = 1000
     session_cache_ttl: int = 3600
 
+    # Retry configuration
+    retry_max_attempts: int = 3
+    retry_min_wait: float = 1.0  # seconds
+    retry_max_wait: float = 10.0  # seconds
+    retry_multiplier: float = 2.0  # exponential backoff multiplier
+
     # Logging
     log_level: str = "INFO"
 

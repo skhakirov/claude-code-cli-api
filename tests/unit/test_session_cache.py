@@ -1,6 +1,6 @@
 """
 TDD: Session cache tests.
-Status: RED (must fail before implementation)
+Status: GREEN (async methods)
 """
 import pytest
 from datetime import datetime, timezone
@@ -9,7 +9,8 @@ from datetime import datetime, timezone
 class TestSessionCache:
     """Tests for SessionCache."""
 
-    def test_cache_save_and_get(self):
+    @pytest.mark.asyncio
+    async def test_cache_save_and_get(self):
         """Save and retrieve session."""
         from src.services.session_cache import SessionCache, SessionMetadata
 
@@ -23,21 +24,23 @@ class TestSessionCache:
             working_directory="/workspace"
         )
 
-        cache.save("test-123", metadata)
-        result = cache.get("test-123")
+        await cache.save("test-123", metadata)
+        result = await cache.get("test-123")
 
         assert result is not None
         assert result.session_id == "test-123"
 
-    def test_cache_get_nonexistent(self):
+    @pytest.mark.asyncio
+    async def test_cache_get_nonexistent(self):
         """Get non-existent session returns None."""
         from src.services.session_cache import SessionCache
 
         cache = SessionCache()
-        result = cache.get("nonexistent")
+        result = await cache.get("nonexistent")
         assert result is None
 
-    def test_cache_update_activity(self):
+    @pytest.mark.asyncio
+    async def test_cache_update_activity(self):
         """Update session activity."""
         from src.services.session_cache import SessionCache, SessionMetadata
 
@@ -53,40 +56,43 @@ class TestSessionCache:
             total_cost_usd=0.0
         )
 
-        cache.save("test-123", metadata)
-        cache.update_activity("test-123", cost=0.005)
+        await cache.save("test-123", metadata)
+        await cache.update_activity("test-123", cost=0.005)
 
-        result = cache.get("test-123")
+        result = await cache.get("test-123")
         assert result.prompt_count == 1
         assert result.total_cost_usd == 0.005
 
-    def test_cache_update_activity_nonexistent(self):
+    @pytest.mark.asyncio
+    async def test_cache_update_activity_nonexistent(self):
         """Update non-existent session returns False."""
         from src.services.session_cache import SessionCache
 
         cache = SessionCache()
-        result = cache.update_activity("nonexistent", cost=0.001)
+        result = await cache.update_activity("nonexistent", cost=0.001)
         assert result is False
 
-    def test_cache_delete(self):
+    @pytest.mark.asyncio
+    async def test_cache_delete(self):
         """Delete session."""
         from src.services.session_cache import SessionCache, SessionMetadata
 
         cache = SessionCache()
         now = datetime.now(timezone.utc)
 
-        cache.save("test-123", SessionMetadata(
+        await cache.save("test-123", SessionMetadata(
             session_id="test-123",
             created_at=now,
             last_activity=now,
             working_directory="/workspace"
         ))
 
-        assert cache.delete("test-123") is True
-        assert cache.get("test-123") is None
-        assert cache.delete("test-123") is False
+        assert await cache.delete("test-123") is True
+        assert await cache.get("test-123") is None
+        assert await cache.delete("test-123") is False
 
-    def test_cache_list_all(self):
+    @pytest.mark.asyncio
+    async def test_cache_list_all(self):
         """List all sessions."""
         from src.services.session_cache import SessionCache, SessionMetadata
 
@@ -94,17 +100,18 @@ class TestSessionCache:
         now = datetime.now(timezone.utc)
 
         for i in range(3):
-            cache.save(f"session-{i}", SessionMetadata(
+            await cache.save(f"session-{i}", SessionMetadata(
                 session_id=f"session-{i}",
                 created_at=now,
                 last_activity=now,
                 working_directory="/workspace"
             ))
 
-        all_sessions = cache.list_all()
+        all_sessions = await cache.list_all()
         assert len(all_sessions) == 3
 
-    def test_cache_maxsize(self):
+    @pytest.mark.asyncio
+    async def test_cache_maxsize(self):
         """Cache respects maxsize limit."""
         from src.services.session_cache import SessionCache, SessionMetadata
 
@@ -112,7 +119,7 @@ class TestSessionCache:
         now = datetime.now(timezone.utc)
 
         for i in range(5):
-            cache.save(f"session-{i}", SessionMetadata(
+            await cache.save(f"session-{i}", SessionMetadata(
                 session_id=f"session-{i}",
                 created_at=now,
                 last_activity=now,
@@ -121,7 +128,8 @@ class TestSessionCache:
 
         assert len(cache) <= 2
 
-    def test_cache_len(self):
+    @pytest.mark.asyncio
+    async def test_cache_len(self):
         """Cache length."""
         from src.services.session_cache import SessionCache, SessionMetadata
 
@@ -130,7 +138,7 @@ class TestSessionCache:
 
         assert len(cache) == 0
 
-        cache.save("test-1", SessionMetadata(
+        await cache.save("test-1", SessionMetadata(
             session_id="test-1",
             created_at=now,
             last_activity=now,
@@ -138,6 +146,27 @@ class TestSessionCache:
         ))
 
         assert len(cache) == 1
+
+    @pytest.mark.asyncio
+    async def test_cache_clear(self):
+        """Clear all sessions."""
+        from src.services.session_cache import SessionCache, SessionMetadata
+
+        cache = SessionCache()
+        now = datetime.now(timezone.utc)
+
+        for i in range(3):
+            await cache.save(f"session-{i}", SessionMetadata(
+                session_id=f"session-{i}",
+                created_at=now,
+                last_activity=now,
+                working_directory="/workspace"
+            ))
+
+        assert len(cache) == 3
+        cleared = await cache.clear()
+        assert cleared == 3
+        assert len(cache) == 0
 
 
 class TestSessionMetadata:

@@ -12,9 +12,19 @@ def get_executor() -> ClaudeExecutor:
     return ClaudeExecutor()
 
 
-@lru_cache
 def get_session_cache() -> SessionCache:
-    """Get cached SessionCache instance."""
+    """Get SessionCache instance from app state.
+
+    Uses the session cache initialized during app lifespan.
+    Falls back to creating a new instance if app_state cache is not available
+    (e.g., during testing).
+    """
+    from .main import app_state
+
+    if app_state.session_cache is not None:
+        return app_state.session_cache
+
+    # Fallback for testing or when lifespan hasn't run
     settings = get_settings()
     return SessionCache(
         maxsize=settings.session_cache_maxsize,

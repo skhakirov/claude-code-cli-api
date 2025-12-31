@@ -13,6 +13,14 @@ import sys
 from typing import AsyncIterator, Optional, TYPE_CHECKING, Any
 from pathlib import Path
 
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception,
+    RetryError,
+)
+
 # Python 3.10 compatibility
 if sys.version_info >= (3, 11):
     from asyncio import timeout as async_timeout
@@ -31,6 +39,43 @@ else:
             raise asyncio.TimeoutError()
         finally:
             handle.cancel()
+
+
+def _is_retryable_error(exception: BaseException) -> bool:
+    """Determine if an exception is retryable.
+
+    Retryable errors:
+    - CLIConnectionError: Temporary connection issues
+    - TimeoutError: Network timeouts (but not execution timeouts)
+    - OSError with specific errno: Network-related OS errors
+
+    Non-retryable errors:
+    - ProcessError: Usually indicates a real problem with the request
+    - CLINotFoundError: CLI not installed, won't fix itself
+    - CLIJSONDecodeError: Bad response, retrying won't help
+    - PathTraversalError, UnauthorizedDirectoryError: Security errors
+    """
+    # Try to import SDK exceptions for type checking
+    try:
+        from claude_agent_sdk import CLIConnectionError
+        if isinstance(exception, CLIConnectionError):
+            return True
+    except ImportError:
+        pass
+
+    # Network-related errors are retryable
+    if isinstance(exception, (ConnectionError, TimeoutError)):
+        return True
+
+    # OSError with network errno
+    if isinstance(exception, OSError) and exception.errno in (
+        110,  # ETIMEDOUT
+        111,  # ECONNREFUSED
+        113,  # EHOSTUNREACH
+    ):
+        return True
+
+    return False
 
 from ..models.request import QueryRequest
 from ..models.response import (
@@ -154,9 +199,22 @@ class ClaudeExecutor:
             include_partial_messages=request.include_partial_messages,
         )
 
+    def _create_retry_decorator(self):
+        """Create a tenacity retry decorator with configured settings."""
+        return retry(
+            stop=stop_after_attempt(self.settings.retry_max_attempts),
+            wait=wait_exponential(
+                multiplier=self.settings.retry_multiplier,
+                min=self.settings.retry_min_wait,
+                max=self.settings.retry_max_wait,
+            ),
+            retry=retry_if_exception(_is_retryable_error),
+            reraise=True,
+        )
+
     async def execute_query(self, request: QueryRequest) -> QueryResponse:
         """
-        Execute query and collect all messages.
+        Execute query and collect all messages with automatic retry for transient errors.
 
         Source: https://platform.claude.com/docs/en/agent-sdk/python#query
         Returns AsyncIterator[Message] where Message is:
@@ -185,8 +243,19 @@ class ClaudeExecutor:
         duration_api_ms = 0
         is_error = False
         error_msg: Optional[str] = None
+        retry_count = 0
 
-        try:
+        # Inner function with retry logic
+        async def _execute_with_retry():
+            nonlocal session_id, result_text, tool_calls, thinking_blocks
+            nonlocal model_used, usage, cost, num_turns, duration_api_ms
+            nonlocal is_error, error_msg, retry_count
+
+            # Reset collectors for retry
+            result_text = ""
+            tool_calls = []
+            thinking_blocks = []
+
             async with async_timeout(request.timeout or self.settings.default_timeout):
                 # Source: https://platform.claude.com/docs/en/agent-sdk/python#query
                 async for msg in query(
@@ -234,13 +303,26 @@ class ClaudeExecutor:
                                 output_tokens=msg.usage.get('output_tokens', 0)
                             )
 
+        try:
+            # Apply retry decorator dynamically
+            retry_decorator = self._create_retry_decorator()
+            retryable_execute = retry_decorator(_execute_with_retry)
+            await retryable_execute()
+        except RetryError as e:
+            # All retries exhausted
+            is_error = True
+            error_msg = f"All {self.settings.retry_max_attempts} retry attempts failed: {str(e.last_attempt.exception())}"
+            raise handle_sdk_error(e.last_attempt.exception())
         except asyncio.TimeoutError:
             is_error = True
             error_msg = f"Execution timeout after {request.timeout}s"
         except Exception as e:
-            is_error = True
-            error_msg = str(e)
-            raise handle_sdk_error(e)
+            # Non-retryable error or other exception
+            if not _is_retryable_error(e):
+                is_error = True
+                error_msg = str(e)
+                raise handle_sdk_error(e)
+            raise
 
         duration_ms = int((time.time() - start_time) * 1000)
 

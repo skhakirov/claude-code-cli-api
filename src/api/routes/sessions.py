@@ -15,7 +15,7 @@ async def list_sessions(
     cache: SessionCache = Depends(get_session_cache)
 ) -> List[SessionMetadata]:
     """List all cached sessions."""
-    return cache.list_all()
+    return await cache.list_all()
 
 
 @router.get("/{session_id}", response_model=SessionMetadata)
@@ -25,7 +25,7 @@ async def get_session(
     cache: SessionCache = Depends(get_session_cache)
 ) -> SessionMetadata:
     """Get session by ID."""
-    session = cache.get(session_id)
+    session = await cache.get(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
@@ -38,6 +38,6 @@ async def delete_session(
     cache: SessionCache = Depends(get_session_cache)
 ):
     """Delete session by ID."""
-    if not cache.delete(session_id):
+    if not await cache.delete(session_id):
         raise HTTPException(status_code=404, detail="Session not found")
     return {"status": "deleted", "session_id": session_id}

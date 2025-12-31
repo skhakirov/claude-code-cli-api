@@ -18,6 +18,9 @@ typing-extensions>=4.0.0
 # In-memory cache with TTL
 cachetools>=5.5.0
 
+# Retry logic with exponential backoff
+tenacity>=8.0.0
+
 # SSE Streaming
 sse-starlette>=2.1.0
 

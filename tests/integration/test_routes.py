@@ -59,9 +59,12 @@ def client(mock_settings, mock_sdk):
     with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
         with patch("src.core.config.get_settings", return_value=mock_settings):
             # Clear caches before importing
-            from src.api.dependencies import get_executor, get_session_cache
+            from src.api.dependencies import get_executor
             get_executor.cache_clear()
-            get_session_cache.cache_clear()
+
+            # Reset app_state session_cache
+            from src.api.main import app_state
+            app_state.session_cache = None
 
             from src.api.main import app
             return TestClient(app)
@@ -107,11 +110,11 @@ class TestQueryRoutes:
 
         with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
             with patch("src.core.config.get_settings", return_value=mock_settings):
-                from src.api.dependencies import get_executor, get_session_cache
+                from src.api.dependencies import get_executor
                 get_executor.cache_clear()
-                get_session_cache.cache_clear()
 
-                from src.api.main import app
+                from src.api.main import app, app_state
+                app_state.session_cache = None
                 client = TestClient(app)
 
                 response = client.post(
@@ -155,11 +158,11 @@ class TestQueryRoutes:
 
         with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
             with patch("src.core.config.get_settings", return_value=mock_settings):
-                from src.api.dependencies import get_executor, get_session_cache
+                from src.api.dependencies import get_executor
                 get_executor.cache_clear()
-                get_session_cache.cache_clear()
 
-                from src.api.main import app
+                from src.api.main import app, app_state
+                app_state.session_cache = None
                 client = TestClient(app)
 
                 response = client.post(
