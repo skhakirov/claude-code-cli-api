@@ -74,3 +74,51 @@ class TestSettings:
         s1 = get_settings()
         s2 = get_settings()
         assert s1 is s2
+
+    def test_settings_retry_jitter_max(self):
+        """Settings should have retry_jitter_max for thundering herd prevention."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test"
+        )
+        assert settings.retry_jitter_max == 1.0
+        assert isinstance(settings.retry_jitter_max, float)
+
+    def test_settings_generator_cleanup_timeout(self):
+        """Settings should have generator_cleanup_timeout."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test"
+        )
+        assert settings.generator_cleanup_timeout == 5.0
+        assert isinstance(settings.generator_cleanup_timeout, float)
+
+    def test_settings_message_stall_timeout(self):
+        """Settings should have message_stall_timeout for stuck detection."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test"
+        )
+        assert settings.message_stall_timeout == 60.0
+        assert isinstance(settings.message_stall_timeout, float)
+
+    def test_settings_custom_robustness_values(self):
+        """Settings should accept custom robustness values."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test",
+            retry_jitter_max=2.5,
+            generator_cleanup_timeout=10.0,
+            message_stall_timeout=120.0
+        )
+        assert settings.retry_jitter_max == 2.5
+        assert settings.generator_cleanup_timeout == 10.0
+        assert settings.message_stall_timeout == 120.0

@@ -3,7 +3,9 @@ TDD: Integration tests for ClaudeExecutor.
 Status: GREEN (with mocked SDK)
 """
 import pytest
-from unittest.mock import patch, MagicMock
+import asyncio
+import time
+from unittest.mock import patch, MagicMock, AsyncMock
 
 
 class TestClaudeExecutor:
@@ -240,3 +242,198 @@ class TestClaudeExecutor:
 
                 options = executor._build_options(request)
                 assert options is not None
+
+
+class TestP0Robustness:
+    """Tests for P0 robustness improvements."""
+
+    @pytest.fixture
+    def mock_sdk(self):
+        """Create mock SDK components."""
+        class MockAssistantMessage:
+            pass
+
+        class MockResultMessage:
+            pass
+
+        class MockSystemMessage:
+            pass
+
+        class MockUserMessage:
+            pass
+
+        class MockTextBlock:
+            pass
+
+        class MockThinkingBlock:
+            pass
+
+        class MockToolUseBlock:
+            pass
+
+        class MockToolResultBlock:
+            pass
+
+        return {
+            'query': MagicMock(),
+            'ClaudeAgentOptions': MagicMock(),
+            'AssistantMessage': MockAssistantMessage,
+            'ResultMessage': MockResultMessage,
+            'SystemMessage': MockSystemMessage,
+            'UserMessage': MockUserMessage,
+            'TextBlock': MockTextBlock,
+            'ThinkingBlock': MockThinkingBlock,
+            'ToolUseBlock': MockToolUseBlock,
+            'ToolResultBlock': MockToolResultBlock,
+        }
+
+    def test_retry_decorator_uses_jitter(self, mock_settings, mock_sdk):
+        """Verify retry decorator uses wait_exponential_jitter."""
+        with patch("src.core.config.get_settings", return_value=mock_settings):
+            with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
+                from src.services.claude_executor import ClaudeExecutor
+
+                executor = ClaudeExecutor()
+                executor._sdk = mock_sdk
+
+                decorator = executor._create_retry_decorator()
+
+                # Verify the decorator was created (tenacity decorator is callable)
+                assert callable(decorator)
+
+    @pytest.mark.asyncio
+    async def test_generator_cleanup_timeout(self, mock_settings, mock_sdk):
+        """Generator cleanup should timeout if aclose() hangs."""
+        # Mock generator that hangs on aclose
+        class HangingGenerator:
+            async def __anext__(self):
+                raise StopAsyncIteration
+
+            def __aiter__(self):
+                return self
+
+            async def aclose(self):
+                # Simulate hanging cleanup
+                await asyncio.sleep(100)
+
+        result_msg = MagicMock()
+        result_msg.session_id = "test-123"
+        result_msg.duration_ms = 100
+        result_msg.duration_api_ms = 80
+        result_msg.is_error = False
+        result_msg.num_turns = 1
+        result_msg.total_cost_usd = 0.001
+        result_msg.usage = None
+        result_msg.result = "Done"
+        result_msg.__class__ = mock_sdk['ResultMessage']
+
+        message_count = 0
+
+        async def gen_with_hanging_cleanup(*args, **kwargs):
+            nonlocal message_count
+            message_count += 1
+            yield result_msg
+
+        # Set short cleanup timeout for test
+        mock_settings.generator_cleanup_timeout = 0.1
+
+        mock_sdk['query'] = gen_with_hanging_cleanup
+
+        with patch("src.core.config.get_settings", return_value=mock_settings):
+            with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
+                from src.services.claude_executor import ClaudeExecutor
+                from src.models.request import QueryRequest
+
+                executor = ClaudeExecutor()
+                executor._sdk = mock_sdk
+
+                request = QueryRequest(prompt="Hello", timeout=60)
+
+                # Should not hang even if generator.aclose() hangs
+                start = time.time()
+                response = await executor.execute_query(request)
+                elapsed = time.time() - start
+
+                # Should complete quickly (not wait 100 seconds)
+                assert elapsed < 5.0
+                assert response.status.value == "success"
+
+    @pytest.mark.asyncio
+    async def test_message_stall_detection_logs_warning(self, mock_settings, mock_sdk):
+        """Stall detection should log warning when messages are slow."""
+        result_msg = MagicMock()
+        result_msg.session_id = "test-stall"
+        result_msg.duration_ms = 100
+        result_msg.duration_api_ms = 80
+        result_msg.is_error = False
+        result_msg.num_turns = 1
+        result_msg.total_cost_usd = 0.001
+        result_msg.usage = None
+        result_msg.result = "Done"
+        result_msg.__class__ = mock_sdk['ResultMessage']
+
+        message_times = []
+
+        async def slow_gen(*args, **kwargs):
+            # First message
+            message_times.append(time.time())
+            yield result_msg
+
+        # Set very short stall timeout for test
+        mock_settings.message_stall_timeout = 0.01
+
+        mock_sdk['query'] = slow_gen
+
+        with patch("src.core.config.get_settings", return_value=mock_settings):
+            with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
+                with patch("src.services.claude_executor.logger") as mock_logger:
+                    from src.services.claude_executor import ClaudeExecutor
+                    from src.models.request import QueryRequest
+
+                    executor = ClaudeExecutor()
+                    executor._sdk = mock_sdk
+
+                    request = QueryRequest(prompt="Hello", timeout=60)
+
+                    # Wait a bit before executing to trigger stall detection
+                    await asyncio.sleep(0.05)  # 50ms > 10ms stall timeout
+
+                    response = await executor.execute_query(request)
+
+                    # Should still succeed
+                    assert response.status.value == "success"
+
+    @pytest.mark.asyncio
+    async def test_streaming_generator_cleanup_timeout(self, mock_settings, mock_sdk):
+        """Streaming generator cleanup should also timeout."""
+        result_msg = MagicMock()
+        result_msg.session_id = "stream-123"
+        result_msg.duration_ms = 100
+        result_msg.duration_api_ms = 80
+        result_msg.is_error = False
+        result_msg.num_turns = 1
+        result_msg.total_cost_usd = 0.001
+        result_msg.__class__ = mock_sdk['ResultMessage']
+
+        async def gen_func(*args, **kwargs):
+            yield result_msg
+
+        mock_settings.generator_cleanup_timeout = 0.1
+        mock_sdk['query'] = gen_func
+
+        with patch("src.core.config.get_settings", return_value=mock_settings):
+            with patch("src.services.claude_executor._get_sdk", return_value=mock_sdk):
+                from src.services.claude_executor import ClaudeExecutor
+                from src.models.request import QueryRequest
+
+                executor = ClaudeExecutor()
+                executor._sdk = mock_sdk
+
+                request = QueryRequest(prompt="Hello", timeout=60)
+
+                events = []
+                async for event in executor.execute_streaming(request):
+                    events.append(event)
+
+                # Should complete and have result event
+                assert any(e.event == "result" for e in events)

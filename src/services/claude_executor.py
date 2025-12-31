@@ -16,7 +16,7 @@ from pathlib import Path
 from tenacity import (
     retry,
     stop_after_attempt,
-    wait_exponential,
+    wait_exponential_jitter,
     retry_if_exception,
     RetryError,
 )
@@ -227,13 +227,17 @@ class ClaudeExecutor:
         )
 
     def _create_retry_decorator(self):
-        """Create a tenacity retry decorator with configured settings."""
+        """Create a tenacity retry decorator with configured settings.
+
+        Uses exponential backoff with jitter to prevent thundering herd problem
+        when multiple clients retry simultaneously.
+        """
         return retry(
             stop=stop_after_attempt(self.settings.retry_max_attempts),
-            wait=wait_exponential(
-                multiplier=self.settings.retry_multiplier,
-                min=self.settings.retry_min_wait,
+            wait=wait_exponential_jitter(
+                initial=self.settings.retry_min_wait,
                 max=self.settings.retry_max_wait,
+                jitter=self.settings.retry_jitter_max,
             ),
             retry=retry_if_exception(_is_retryable_error),
             before_sleep=self._log_retry_attempt,
@@ -296,6 +300,9 @@ class ClaudeExecutor:
 
             # Store generator for proper cleanup
             sdk_generator = None
+            last_activity = time.time()
+            stall_timeout = self.settings.message_stall_timeout
+
             try:
                 async with async_timeout(request.timeout or self.settings.default_timeout):
                     # Source: https://platform.claude.com/docs/en/agent-sdk/python#query
@@ -304,6 +311,18 @@ class ClaudeExecutor:
                         options=self._build_options(request)
                     )
                     async for msg in sdk_generator:
+                        # Check for stalled message processing
+                        current_time = time.time()
+                        if current_time - last_activity > stall_timeout:
+                            logger.warning(
+                                "message_stall_detected",
+                                stall_seconds=current_time - last_activity,
+                                timeout_threshold=stall_timeout
+                            )
+                            # Don't break - let overall timeout handle it
+                            # This is just a warning for monitoring
+                        last_activity = current_time
+
                         # AssistantMessage processing
                         # Source: https://platform.claude.com/docs/en/agent-sdk/python#assistantmessage
                         # content: list[ContentBlock], model: str
@@ -353,11 +372,20 @@ class ClaudeExecutor:
                                 )
             finally:
                 # Ensure generator cleanup to prevent resource leaks
+                # Use timeout to prevent hanging on cleanup
                 if sdk_generator is not None:
                     try:
-                        await sdk_generator.aclose()
+                        await asyncio.wait_for(
+                            sdk_generator.aclose(),
+                            timeout=self.settings.generator_cleanup_timeout
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning(
+                            "generator_cleanup_timeout",
+                            timeout_seconds=self.settings.generator_cleanup_timeout
+                        )
                     except Exception:
-                        pass  # Ignore cleanup errors
+                        pass  # Ignore other cleanup errors
 
         try:
             # Apply retry decorator dynamically
@@ -435,6 +463,9 @@ class ClaudeExecutor:
 
         # Store generator for proper cleanup
         sdk_generator = None
+        last_activity = time.time()
+        stall_timeout = self.settings.message_stall_timeout
+
         try:
             async with async_timeout(request.timeout or self.settings.default_timeout):
                 sdk_generator = query(
@@ -442,6 +473,16 @@ class ClaudeExecutor:
                     options=self._build_options(request)
                 )
                 async for msg in sdk_generator:
+                    # Check for stalled message processing
+                    current_time = time.time()
+                    if current_time - last_activity > stall_timeout:
+                        logger.warning(
+                            "message_stall_detected",
+                            stall_seconds=current_time - last_activity,
+                            timeout_threshold=stall_timeout
+                        )
+                    last_activity = current_time
+
                     for event in self._message_to_events(
                         msg, SystemMessage, AssistantMessage, ResultMessage,
                         TextBlock, ThinkingBlock, ToolUseBlock, ToolResultBlock
@@ -465,11 +506,20 @@ class ClaudeExecutor:
             yield StreamEvent(event="error", data={"error": str(e)})
         finally:
             # Ensure generator cleanup to prevent resource leaks
+            # Use timeout to prevent hanging on cleanup
             if sdk_generator is not None:
                 try:
-                    await sdk_generator.aclose()
+                    await asyncio.wait_for(
+                        sdk_generator.aclose(),
+                        timeout=self.settings.generator_cleanup_timeout
+                    )
+                except asyncio.TimeoutError:
+                    logger.warning(
+                        "generator_cleanup_timeout",
+                        timeout_seconds=self.settings.generator_cleanup_timeout
+                    )
                 except Exception:
-                    pass  # Ignore cleanup errors
+                    pass  # Ignore other cleanup errors
 
     def _message_to_events(
         self, msg, SystemMessage, AssistantMessage, ResultMessage,

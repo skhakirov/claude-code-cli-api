@@ -23,7 +23,16 @@ def mock_settings():
         default_working_directory="/workspace",
         session_cache_maxsize=100,
         session_cache_ttl=3600,
-        log_level="DEBUG"
+        log_level="DEBUG",
+        # P0 robustness settings
+        retry_max_attempts=3,
+        retry_min_wait=1.0,
+        retry_max_wait=10.0,
+        retry_multiplier=2.0,
+        retry_jitter_max=1.0,
+        generator_cleanup_timeout=5.0,
+        message_stall_timeout=60.0,
+        max_response_size=10 * 1024 * 1024
     )
 
 

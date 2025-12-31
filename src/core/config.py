@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     retry_min_wait: float = 1.0  # seconds
     retry_max_wait: float = 10.0  # seconds
     retry_multiplier: float = 2.0  # exponential backoff multiplier
+    retry_jitter_max: float = 1.0  # maximum random jitter in seconds (prevents thundering herd)
 
     # Response limits
     max_response_size: int = 10 * 1024 * 1024  # 10 MB default
@@ -60,6 +61,8 @@ class Settings(BaseSettings):
 
     # Shutdown
     shutdown_timeout: float = 30.0  # Graceful shutdown timeout in seconds
+    generator_cleanup_timeout: float = 5.0  # Timeout for SDK generator cleanup
+    message_stall_timeout: float = 60.0  # Timeout for detecting stalled message processing
 
     # Logging
     log_level: str = "INFO"
