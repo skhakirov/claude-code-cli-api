@@ -1,23 +1,33 @@
+# Production configuration for VPS deployment
+# Usage: docker compose -f docker-compose.prod.yml up -d
+
 services:
   claude-api:
     build: .
     container_name: claude-code-api
     restart: unless-stopped
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - CLAUDE_API_API_KEYS=${CLAUDE_API_API_KEYS}
       - CLAUDE_API_DEFAULT_MODEL=${CLAUDE_API_DEFAULT_MODEL:-claude-sonnet-4-5-20250929}
       - CLAUDE_API_DEFAULT_PERMISSION_MODE=${CLAUDE_API_DEFAULT_PERMISSION_MODE:-acceptEdits}
-      - CLAUDE_API_ALLOWED_DIRECTORIES=${CLAUDE_API_ALLOWED_DIRECTORIES:-["/workspace"]}
+      - CLAUDE_API_ALLOWED_DIRECTORIES=${CLAUDE_API_ALLOWED_DIRECTORIES:-["/workspace","/home/lancer/projects"]}
       - CLAUDE_API_DEFAULT_WORKING_DIRECTORY=${CLAUDE_API_DEFAULT_WORKING_DIRECTORY:-/workspace}
       - CLAUDE_API_LOG_LEVEL=${CLAUDE_API_LOG_LEVEL:-INFO}
     volumes:
       - ./workspace:/workspace:rw
+      - /home/lancer/projects:/home/lancer/projects:rw
+      - /home/lancer/.claude/.credentials.json:/home/appuser/.claude/.credentials.json:ro
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8002:8000"
+    networks:
+      - vps_app-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+networks:
+  vps_app-network:
+    external: true

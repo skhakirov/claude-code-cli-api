@@ -109,3 +109,9 @@ PROMPT.md
 PLAN.md
 RELEASE_CHECKLIST.md
 CLAUDE.md
+
+# Local configuration (VPS-specific, contains secrets)
+docs/LOCAL_CONFIG.md
+
+# Production configs (contains local paths)
+docker-compose.prod.yml
