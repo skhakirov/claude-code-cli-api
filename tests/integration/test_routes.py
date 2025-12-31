@@ -254,6 +254,25 @@ class TestHealthReadyEndpoint:
         assert "failure_count" in cb
         assert "is_available" in cb
 
+    def test_health_ready_memory_includes_peak(self, client):
+        """P3: Memory status includes peak and VMS tracking."""
+        response = client.get("/api/v1/health/ready")
+        data = response.json()
+
+        assert "memory" in data
+        memory = data["memory"]
+        assert "rss_mb" in memory
+        assert "peak_mb" in memory  # P3: Peak memory tracking
+        assert "vms_mb" in memory  # P3: Virtual memory size
+        assert "status" in memory
+
+        # All values should be non-negative numbers
+        assert isinstance(memory["rss_mb"], (int, float))
+        assert isinstance(memory["peak_mb"], (int, float))
+        assert isinstance(memory["vms_mb"], (int, float))
+        assert memory["rss_mb"] >= 0
+        assert memory["peak_mb"] >= 0
+
 
 class TestValidationMiddleware:
     """Tests for P2: Request validation middleware."""

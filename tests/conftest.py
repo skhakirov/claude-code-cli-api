@@ -36,6 +36,9 @@ def mock_settings():
         # P2 settings
         max_request_body_size=150_000,
         session_persistence_path="",  # Empty = disabled
+        # P3 settings
+        alert_webhook_url="",  # Empty = disabled
+        alert_webhook_timeout=5.0,
     )
 
 

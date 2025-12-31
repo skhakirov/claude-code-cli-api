@@ -34,8 +34,10 @@ class SDKStatus(BaseModel):
 
 
 class MemoryStatus(BaseModel):
-    """Memory usage info."""
+    """Memory usage info with peak tracking."""
     rss_mb: float
+    peak_mb: float
+    vms_mb: float  # Virtual memory size
     status: str
 
 
@@ -113,24 +115,45 @@ async def readiness_check() -> ReadyResponse:
 
     sdk_status = "healthy" if sdk_available else "unavailable"
 
-    # Check memory usage
+    # Check memory usage with peak tracking
+    rss_mb = 0.0
+    peak_mb = 0.0
+    vms_mb = 0.0
+
     try:
         import resource
-        rss_bytes = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        # On Linux, ru_maxrss is in kilobytes
+        # ru_maxrss is peak RSS (max resident set size)
+        ru = resource.getrusage(resource.RUSAGE_SELF)
         if sys.platform == "linux":
-            rss_mb = rss_bytes / 1024
+            peak_mb = ru.ru_maxrss / 1024  # KB to MB on Linux
         else:
-            # On macOS, it's in bytes
-            rss_mb = rss_bytes / (1024 * 1024)
+            peak_mb = ru.ru_maxrss / (1024 * 1024)  # Bytes to MB on macOS
     except Exception:
-        rss_mb = 0.0
+        pass
 
+    # Try to get current RSS and VMS from /proc on Linux
+    try:
+        if sys.platform == "linux":
+            with open("/proc/self/status", "r") as f:
+                for line in f:
+                    if line.startswith("VmRSS:"):
+                        rss_mb = int(line.split()[1]) / 1024  # KB to MB
+                    elif line.startswith("VmPeak:"):
+                        peak_mb = max(peak_mb, int(line.split()[1]) / 1024)
+                    elif line.startswith("VmSize:"):
+                        vms_mb = int(line.split()[1]) / 1024
+        else:
+            # Fallback for non-Linux: use peak as current RSS estimate
+            rss_mb = peak_mb
+    except Exception:
+        rss_mb = peak_mb  # Fallback
+
+    # Determine memory status based on peak usage
     memory_status = "healthy"
-    if rss_mb > 1024:  # > 1GB
-        memory_status = "high"
-    elif rss_mb > 2048:  # > 2GB
+    if peak_mb > 2048:  # > 2GB peak
         memory_status = "critical"
+    elif peak_mb > 1024:  # > 1GB peak
+        memory_status = "high"
 
     # Check disk space
     try:
@@ -183,6 +206,8 @@ async def readiness_check() -> ReadyResponse:
         ),
         memory=MemoryStatus(
             rss_mb=round(rss_mb, 2),
+            peak_mb=round(peak_mb, 2),
+            vms_mb=round(vms_mb, 2),
             status=memory_status
         ),
         disk=DiskStatus(

@@ -154,3 +154,36 @@ class TestSettings:
             session_persistence_path="/var/data/sessions.json"
         )
         assert settings.session_persistence_path == "/var/data/sessions.json"
+
+    def test_settings_alert_webhook_url_default_empty(self):
+        """Alert webhook URL should default to empty (disabled)."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test"
+        )
+        assert settings.alert_webhook_url == ""
+
+    def test_settings_alert_webhook_timeout_default(self):
+        """Alert webhook timeout should have default value."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test"
+        )
+        assert settings.alert_webhook_timeout == 5.0
+
+    def test_settings_custom_alert_webhook(self):
+        """Settings should accept custom alert webhook config."""
+        from src.core.config import Settings
+
+        settings = Settings(
+            api_keys=["test"],
+            anthropic_api_key="sk-ant-test",
+            alert_webhook_url="https://alerts.example.com/webhook",
+            alert_webhook_timeout=10.0
+        )
+        assert settings.alert_webhook_url == "https://alerts.example.com/webhook"
+        assert settings.alert_webhook_timeout == 10.0

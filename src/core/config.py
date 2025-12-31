@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = "INFO"
 
+    # Alerting
+    alert_webhook_url: str = ""  # Webhook URL for critical alerts (empty = disabled)
+    alert_webhook_timeout: float = 5.0  # Timeout for webhook requests
+
     model_config = {
         "env_prefix": "CLAUDE_API_",
         "env_file": ".env",
