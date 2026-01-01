@@ -43,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Docker Support**
   - Production-ready Dockerfile with non-root user
-  - Docker Compose with Traefik integration
+  - Docker Compose with nginx reverse proxy support
 
 ### Documentation
 

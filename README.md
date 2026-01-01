@@ -729,7 +729,7 @@ services:
       - "8000:8000"
 ```
 
-### docker-compose.yml (production with Traefik)
+### docker-compose.yml (production with nginx)
 
 ```yaml
 services:
@@ -737,31 +737,58 @@ services:
     build: .
     container_name: claude-code-api
     restart: unless-stopped
+    user: "1000:1000"
     environment:
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - CLAUDE_API_API_KEYS=${CLAUDE_API_API_KEYS}
       - CLAUDE_API_DEFAULT_MODEL=${CLAUDE_API_DEFAULT_MODEL:-claude-sonnet-4-5-20250929}
       - CLAUDE_API_DEFAULT_PERMISSION_MODE=${CLAUDE_API_DEFAULT_PERMISSION_MODE:-acceptEdits}
+      - CLAUDE_API_ALLOWED_DIRECTORIES=${CLAUDE_API_ALLOWED_DIRECTORIES:-["/workspace"]}
       - CLAUDE_API_LOG_LEVEL=${CLAUDE_API_LOG_LEVEL:-INFO}
+      - HOME=/home/appuser
     volumes:
       - ./workspace:/workspace:rw
+      - ./appuser-home:/home/appuser:rw
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8002:8000"  # Expose only to localhost (nginx handles HTTPS)
     networks:
-      - traefik
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.claude-api.rule=Host(`claude-api.yourdomain.com`)"
-      - "traefik.http.routers.claude-api.entrypoints=websecure"
-      - "traefik.http.routers.claude-api.tls.certresolver=letsencrypt"
-      - "traefik.http.services.claude-api.loadbalancer.server.port=8000"
-      - "traefik.http.middlewares.claude-ratelimit.ratelimit.average=20"
-      - "traefik.http.middlewares.claude-ratelimit.ratelimit.burst=10"
-      - "traefik.http.routers.claude-api.middlewares=claude-ratelimit"
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
-  traefik:
+  app-network:
     external: true
+```
+
+Configure nginx as reverse proxy with SSL termination (example `/etc/nginx/sites-available/claude-api`):
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name claude-api.yourdomain.com;
+
+    ssl_certificate /etc/letsencrypt/live/yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8002;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # SSE support
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 300s;
+    }
+
+    # Rate limiting (optional)
+    limit_req zone=claude_api burst=20 nodelay;
+}
 ```
 
 ### Running
