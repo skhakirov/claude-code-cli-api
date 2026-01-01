@@ -21,6 +21,7 @@ services:
       - CLAUDE_API_ALLOWED_DIRECTORIES=${CLAUDE_API_ALLOWED_DIRECTORIES:-["/workspace"]}
       - CLAUDE_API_DEFAULT_WORKING_DIRECTORY=${CLAUDE_API_DEFAULT_WORKING_DIRECTORY:-/workspace}
       - CLAUDE_API_LOG_LEVEL=${CLAUDE_API_LOG_LEVEL:-INFO}
+      - CLAUDE_API_SESSION_PERSISTENCE_PATH=/home/appuser/data/sessions.json
       - HOME=/home/appuser
     volumes:
       # Working directory for Claude operations
