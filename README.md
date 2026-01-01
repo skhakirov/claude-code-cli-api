@@ -744,6 +744,7 @@ services:
       - CLAUDE_API_DEFAULT_PERMISSION_MODE=${CLAUDE_API_DEFAULT_PERMISSION_MODE:-acceptEdits}
       - CLAUDE_API_ALLOWED_DIRECTORIES=${CLAUDE_API_ALLOWED_DIRECTORIES:-["/workspace"]}
       - CLAUDE_API_LOG_LEVEL=${CLAUDE_API_LOG_LEVEL:-INFO}
+      - CLAUDE_API_SESSION_PERSISTENCE_PATH=/home/appuser/data/sessions.json
       - HOME=/home/appuser
     volumes:
       - ./workspace:/workspace:rw
