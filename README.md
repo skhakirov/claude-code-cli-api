@@ -5,6 +5,25 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Release](https://img.shields.io/github/v/release/skhakirov/claude-code-cli-api)](https://github.com/skhakirov/claude-code-cli-api/releases)
 
+> [!WARNING]
+> **Archived and no longer maintained (November 2026).**
+> This was an early experiment built on `claude-agent-sdk` 0.1.18 in December 2025. It is not production-ready, so don't deploy it as is.
+>
+> Known issues:
+> - Claude runs with an empty system prompt, not the Claude Code preset, so it behaves differently from Claude Code.
+> - `/query/stream` drops partial-message and tool-result events, so `include_partial_messages` does nothing.
+> - The circuit breaker counts client errors such as a bad `working_directory`. A few bad requests block the service for everyone. Some errors return HTTP 500 instead of 502, 503 or 504.
+> - On a timeout or transient error, the whole agent run executes again, including any file edits and commands it already made.
+> - Anyone with an API key sets `permission_mode` and `mcp_servers`, so they can run arbitrary commands in the container.
+>
+> Use these instead:
+> - [Headless mode](https://code.claude.com/docs/en/headless): `claude -p --output-format json` for scripts and automation.
+> - [Claude Agent SDK](https://code.claude.com/docs/en/agent-sdk/overview): run the agent directly inside your application.
+> - [Routines](https://code.claude.com/docs/en/routines): trigger Claude Code in the cloud over HTTP.
+> - [Claude Managed Agents](https://platform.claude.com/docs/en/managed-agents/overview): a hosted agent API.
+>
+> Per [Anthropic's legal and compliance docs](https://code.claude.com/docs/en/legal-and-compliance), services built on the Agent SDK should use API key authentication. Pro and Max subscription credentials are meant for individual use.
+
 Headless HTTP API service for Claude Code CLI, built on [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk-python). Enables integration of Claude Code capabilities into any application via REST API.
 
 ## Features
